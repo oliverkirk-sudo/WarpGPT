@@ -21,9 +21,9 @@ type ReversePublicApiRequestUrl struct {
 
 func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://api.openai.com/v1/" + path
+		return "https://api.openai.com/v1" + path
 	}
-	return "https://api.openai.com/v1/" + path + "?" + rawquery
+	return "https://api.openai.com/v1" + path + "?" + rawquery
 }
 func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
@@ -52,19 +52,19 @@ func (u ReversePublicApiRequestUrl) Generate(path string, rawquery string) strin
 
 func CheckRequest(c *gin.Context) RequestUrl {
 	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "backend-api") {
+	if strings.HasPrefix(path, "/backend-api") {
 		return ReverseBackendRequestUrl{}
 	}
-	if strings.HasPrefix(path, "api") {
+	if strings.HasPrefix(path, "/api") {
 		return ReverseApiRequestUrl{}
 	}
-	if strings.HasPrefix(path, "public-api") {
+	if strings.HasPrefix(path, "/public-api") {
 		return ReversePublicApiRequestUrl{}
 	}
-	if strings.HasPrefix(path, "v1") {
+	if strings.HasPrefix(path, "/v1") {
 		return OfficialApiRequestUrl{}
 	}
-	if strings.HasPrefix(path, "r") {
+	if strings.HasPrefix(path, "/r") {
 		return UnOfficialApiRequestUrl{}
 	}
 	return nil
