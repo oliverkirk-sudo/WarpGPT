@@ -1,0 +1,16 @@
+package common
+
+type RequestType int
+
+const (
+	BACKEND = iota
+	PUBLIC
+	API
+	PROXYAPI
+	REVERSECHATAPI
+	REVERSEIMAGEAPI
+	GETSESSION
+	LOGIN
+	TOKEN
+	OTHER
+)
