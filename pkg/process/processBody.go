@@ -45,7 +45,7 @@ func DecodeRequestBody(p ProcessInterface, requestBody *map[string]interface{}) 
 	return nil
 }
 
-func ProcessConversationRequest(p ProcessInterface, requestBody *map[string]interface{}) error {
+func ProcessConversationRequest(p ProcessInterface, requestBody *map[string]interface{}, mid func(a string) string) error {
 	if _, modelExists := (*requestBody)["model"]; modelExists {
 		if err := addArkoseTokenIfNeeded(p, requestBody); err != nil {
 			return err
@@ -56,7 +56,7 @@ func ProcessConversationRequest(p ProcessInterface, requestBody *map[string]inte
 		return err
 	}
 	defer response.Body.Close()
-	err = StreamResponse(p, response)
+	err = StreamResponse(p, response, mid)
 	if err != nil {
 		return err
 	}
@@ -116,17 +116,26 @@ func makeRequest(p ProcessInterface, requestBody *map[string]interface{}) (*fhtt
 	return response, nil
 }
 
-func StreamResponse(p ProcessInterface, response *fhttp.Response) error {
+func StreamResponse(p ProcessInterface, response *fhttp.Response, mid func(a string) string) error {
 	logger.Log.Infoln("Stream Request")
 	defer response.Body.Close()
-	buf := make([]byte, 1024)
+
+	var accumulatedData strings.Builder
 
 Loop:
 	for {
+		buf := make([]byte, 1024)
 		n, err := response.Body.Read(buf)
 		if n > 0 {
-			p.GetConversation().GinContext.Writer.Write(buf[:n])
-			p.GetConversation().GinContext.Writer.Flush()
+			accumulatedData.Write(buf[:n])
+			if strings.HasSuffix(accumulatedData.String(), "\n\n") {
+				_, err := p.GetConversation().GinContext.Writer.Write([]byte(mid(accumulatedData.String())))
+				if err != nil {
+					return err
+				}
+				p.GetConversation().GinContext.Writer.Flush()
+				accumulatedData.Reset()
+			}
 		}
 		if err != nil {
 			if err == io.EOF {
@@ -134,6 +143,11 @@ Loop:
 			}
 			return err
 		}
+
+		if strings.Contains(accumulatedData.String(), "[DONE]") {
+			break
+		}
+
 		select {
 		case <-p.GetConversation().GinContext.Writer.CloseNotify():
 			break Loop
@@ -143,6 +157,7 @@ Loop:
 	}
 	return nil
 }
+
 func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {
 	for name, values := range response.Header {
 		if name == "Content-Encoding" {

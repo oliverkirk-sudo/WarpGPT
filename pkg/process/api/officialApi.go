@@ -41,7 +41,9 @@ func (p *OfficialApiProcess) ProcessMethod() {
 	process.CopyResponseHeaders(response, p.GetConversation().GinContext)
 
 	if _, exists := requestBody["stream"].(bool); exists {
-		err := process.StreamResponse(p, response)
+		err := process.StreamResponse(p, response, func(a string) string {
+			return a
+		})
 		if err != nil {
 			logger.Log.Fatal(err)
 		}

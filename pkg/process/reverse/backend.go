@@ -27,7 +27,9 @@ func (p *BackendProcess) ProcessMethod() {
 	}
 
 	if strings.HasSuffix(p.Conversation.RequestParam, "conversation") {
-		if err := process.ProcessConversationRequest(p, &requestBody); err != nil {
+		if err := process.ProcessConversationRequest(p, &requestBody, func(a string) string {
+			return a
+		}); err != nil {
 			return
 		}
 	} else {
