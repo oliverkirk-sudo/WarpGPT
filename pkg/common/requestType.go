@@ -18,6 +18,8 @@ type ReverseBackendRequestUrl struct {
 }
 type ReversePublicApiRequestUrl struct {
 }
+type NotHaveUrl struct {
+}
 
 func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
@@ -27,29 +29,32 @@ func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 }
 func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://" + Env.OpenAI_HOST + "/backend-api/" + path
+		return "https://" + Env.OpenAI_HOST + "/backend-api" + path
 	}
-	return "https://" + Env.OpenAI_HOST + "/backend-api/" + path + "?" + rawquery
+	return "https://" + Env.OpenAI_HOST + "/backend-api" + path + "?" + rawquery
 }
 func (u ReverseApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://" + Env.OpenAI_HOST + "/api/" + path
+		return "https://" + Env.OpenAI_HOST + "/api" + path
 	}
-	return "https://" + Env.OpenAI_HOST + "/api/" + path + "?" + rawquery
+	return "https://" + Env.OpenAI_HOST + "/api" + path + "?" + rawquery
 }
 func (u ReverseBackendRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://" + Env.OpenAI_HOST + "/backend-api/" + path
+		return "https://" + Env.OpenAI_HOST + "/backend-api" + path
 	}
-	return "https://" + Env.OpenAI_HOST + "/backend-api/" + path + "?" + rawquery
+	return "https://" + Env.OpenAI_HOST + "/backend-api" + path + "?" + rawquery
 }
 func (u ReversePublicApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://" + Env.OpenAI_HOST + "/public-api/" + path
+		return "https://" + Env.OpenAI_HOST + "/public-api" + path
 	}
 	return "https://" + Env.OpenAI_HOST + "/public-api/" + path + "?" + rawquery
 }
 
+func (u NotHaveUrl) Generate(path string, rawquery string) string {
+	return ""
+}
 func CheckRequest(c *gin.Context) RequestUrl {
 	path := c.Request.URL.Path
 	if strings.HasPrefix(path, "/backend-api") {
@@ -67,5 +72,5 @@ func CheckRequest(c *gin.Context) RequestUrl {
 	if strings.HasPrefix(path, "/r") {
 		return UnOfficialApiRequestUrl{}
 	}
-	return nil
+	return NotHaveUrl{}
 }

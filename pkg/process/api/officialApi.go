@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
-	"io"
 )
 
 type OfficialApiProcess struct {
@@ -18,45 +17,40 @@ type OfficialApiProcess struct {
 func (p *OfficialApiProcess) SetConversation(conversation requestbody.Conversation) {
 	p.Conversation = conversation
 }
-
+func (p *OfficialApiProcess) GetConversation() requestbody.Conversation {
+	return p.Conversation
+}
 func (p *OfficialApiProcess) ProcessMethod() {
-	requestBody := decodeRequestBody(p)
-	if requestBody == nil {
+	var requestBody map[string]interface{}
+	err := process.DecodeRequestBody(p, &requestBody)
+	if err != nil {
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Json Error"})
 		return
 	}
-
 	request, err := createRequest(p, requestBody)
 	if err != nil {
-		p.Conversation.GinContext.JSON(500, gin.H{"error": "Server error"})
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return
 	}
-
-	response, err := p.Conversation.RequestClient.Do(request)
+	response, err := p.GetConversation().RequestClient.Do(request)
 	if err != nil {
-		p.Conversation.GinContext.JSON(500, gin.H{"error": "Return Error"})
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server Error"})
 		return
 	}
-	defer response.Body.Close()
 
-	process.CopyResponseHeaders(response, p.Conversation.GinContext)
+	process.CopyResponseHeaders(response, p.GetConversation().GinContext)
 
 	if _, exists := requestBody["stream"].(bool); exists {
-		streamResponse(p, response)
-	} else {
-		sendJsonResponse(p, response)
-	}
-}
-
-func decodeRequestBody(p *OfficialApiProcess) map[string]interface{} {
-	var requestBody map[string]interface{}
-	if p.Conversation.RequestBody != nil {
-		err := json.NewDecoder(p.Conversation.RequestBody).Decode(&requestBody)
+		err := process.StreamResponse(p, response)
 		if err != nil {
-			p.Conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
-			return nil
+			logger.Log.Fatal(err)
+		}
+	} else {
+		err := process.SendJsonResponse(p, response)
+		if err != nil {
+			logger.Log.Fatal(err)
 		}
 	}
-	return requestBody
 }
 
 func createRequest(p *OfficialApiProcess, requestBody map[string]interface{}) (*http.Request, error) {
@@ -73,31 +67,4 @@ func createRequest(p *OfficialApiProcess, requestBody map[string]interface{}) (*
 	request.Header.Set("Authorization", p.Conversation.GinContext.Request.Header.Get("Authorization"))
 	request.Header.Set("Content-Type", "application/json")
 	return request, nil
-}
-
-func streamResponse(p *OfficialApiProcess, response *http.Response) {
-	logger.Log.Infoln("Stream Request")
-	buf := make([]byte, 1024)
-	for {
-		n, err := response.Body.Read(buf)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			p.Conversation.GinContext.JSON(response.StatusCode, response.Body)
-			return
-		}
-		p.Conversation.GinContext.Writer.Write(buf[:n])
-		p.Conversation.GinContext.Writer.Flush()
-	}
-}
-
-func sendJsonResponse(p *OfficialApiProcess, response *http.Response) {
-	var responseBody map[string]interface{}
-	err := json.NewDecoder(response.Body).Decode(&responseBody)
-	if err != nil {
-		p.Conversation.GinContext.JSON(response.StatusCode, response.Body)
-		return
-	}
-	p.Conversation.GinContext.JSON(response.StatusCode, responseBody)
 }

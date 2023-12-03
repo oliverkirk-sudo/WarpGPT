@@ -6,15 +6,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	http "github.com/bogdanfinn/fhttp"
+	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"io"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
-
-	http "github.com/bogdanfinn/fhttp"
-	tls_client "github.com/bogdanfinn/tls-client"
 )
 
 type Error struct {
@@ -52,12 +51,13 @@ type ArkoseToken struct {
 	ChallengeURLCDNSRI *string `json:"challenge_url_cdn_sri"`
 }
 type AuthResult struct {
-	AccessToken string `json:"access_token"`
-	PUID        string `json:"puid"`
-	FreshToken  string `json:"fresh_token"`
+	AccessToken map[string]interface{} `json:"access_token"`
+	PUID        string                 `json:"puid"`
+	FreshToken  string                 `json:"fresh_token"`
+	Model       map[string]interface{} `json:"model"`
 }
 
-func NewAuthenticator(emailAddress, password string) *Authenticator {
+func NewAuthenticator(emailAddress, password string, puid string) *Authenticator {
 	auth := &Authenticator{
 		EmailAddress: emailAddress,
 		Password:     password,
@@ -65,6 +65,14 @@ func NewAuthenticator(emailAddress, password string) *Authenticator {
 		UserAgent:    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
 	}
 	jar := tls_client.NewCookieJar()
+	cookie := &http.Cookie{
+		Name:   "_puid",
+		Value:  puid,
+		Path:   "/",
+		Domain: ".openai.com",
+	}
+	urls, _ := url.Parse("https://openai.com")
+	jar.SetCookies(urls, []*http.Cookie{cookie})
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(20),
 		tls_client.WithClientProfile(profiles.Chrome_109),
@@ -73,7 +81,6 @@ func NewAuthenticator(emailAddress, password string) *Authenticator {
 		tls_client.WithProxyUrl(common.Env.Proxy),
 	}
 	auth.Session, _ = tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
-
 	return auth
 }
 
@@ -84,18 +91,18 @@ func (auth *Authenticator) URLEncode(str string) string {
 func (auth *Authenticator) Begin() *Error {
 	logger.Log.Debug("Auth Begin")
 
-	url := "https://chat.openai.com/api/auth/csrf"
+	url := "https://" + common.Env.OpenAI_HOST + "/api/auth/csrf"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return NewError("begin", 0, "", err)
 	}
 
-	req.Header.Set("Host", "chat.openai.com")
+	req.Header.Set("Host", ""+common.Env.OpenAI_HOST+"")
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("User-Agent", auth.UserAgent)
 	req.Header.Set("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8")
-	req.Header.Set("Referer", "https://chat.openai.com/auth/login")
+	req.Header.Set("Referer", "https://"+common.Env.OpenAI_HOST+"/auth/login")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 
 	resp, err := auth.Session.Do(req)
@@ -130,19 +137,19 @@ func (auth *Authenticator) Begin() *Error {
 func (auth *Authenticator) partOne(csrfToken string) *Error {
 	logger.Log.Debug("Auth One")
 
-	auth_url := "https://chat.openai.com/api/auth/signin/auth0?prompt=login"
+	auth_url := "https://" + common.Env.OpenAI_HOST + "/api/auth/signin/auth0?prompt=login"
 	headers := map[string]string{
-		"Host":            "chat.openai.com",
+		"Host":            "" + common.Env.OpenAI_HOST + "",
 		"User-Agent":      auth.UserAgent,
 		"Content-Type":    "application/x-www-form-urlencoded",
 		"Accept":          "*/*",
 		"Sec-Gpc":         "1",
 		"Accept-Language": "en-US,en;q=0.8",
-		"Origin":          "https://chat.openai.com",
+		"Origin":          "https://" + common.Env.OpenAI_HOST + "",
 		"Sec-Fetch-Site":  "same-origin",
 		"Sec-Fetch-Mode":  "cors",
 		"Sec-Fetch-Dest":  "empty",
-		"Referer":         "https://chat.openai.com/auth/login",
+		"Referer":         "https://" + common.Env.OpenAI_HOST + "/auth/login",
 		"Accept-Encoding": "gzip, deflate",
 	}
 
@@ -172,7 +179,7 @@ func (auth *Authenticator) partOne(csrfToken string) *Error {
 		if err != nil {
 			return NewError("part_one", 0, "Failed to decode JSON", err)
 		}
-		if urlResponse.URL == "https://chat.openai.com/api/auth/error?error=OAuthSignin" || strings.Contains(urlResponse.URL, "error") {
+		if urlResponse.URL == "https://"+common.Env.OpenAI_HOST+"/api/auth/error?error=OAuthSignin" || strings.Contains(urlResponse.URL, "error") {
 			err := NewError("part_one", resp.StatusCode, "You have been rate limited. Please try again later.", fmt.Errorf("error: Check details"))
 			return err
 		}
@@ -349,7 +356,7 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 	logger.Log.Debug("Auth Six")
 	req, _ := http.NewRequest("GET", urls, nil)
 	for k, v := range map[string]string{
-		"Host":            "chat.openai.com",
+		"Host":            "" + common.Env.OpenAI_HOST + "",
 		"Accept":          "application/json",
 		"Connection":      "keep-alive",
 		"User-Agent":      auth.UserAgent,
@@ -370,11 +377,11 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 		return NewError("part_six", resp.StatusCode, urls, fmt.Errorf("incorrect response code"))
 	}
 	// Check location header
-	if location := resp.Header.Get("Location"); location != "https://chat.openai.com/" {
+	if location := resp.Header.Get("Location"); location != "https://"+common.Env.OpenAI_HOST+"/" {
 		return NewError("part_six", resp.StatusCode, location, fmt.Errorf("incorrect redirect"))
 	}
 
-	sessionUrl := "https://chat.openai.com/api/auth/session"
+	sessionUrl := "https://" + common.Env.OpenAI_HOST + "/api/auth/session"
 
 	req, _ = http.NewRequest("GET", sessionUrl, nil)
 
@@ -399,9 +406,9 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 		resultString := fmt.Sprintf("%v", result)
 		return NewError("part_six", 0, resultString, fmt.Errorf("missing access token"))
 	}
-	cookieUrl, _ := url.Parse("https://chat.openai.com")
+	cookieUrl, _ := url.Parse("https://" + common.Env.OpenAI_HOST + "")
 	jar := auth.Session.GetCookies(cookieUrl)
-	auth.AuthResult.AccessToken = result["accessToken"].(string)
+	auth.AuthResult.AccessToken = result
 	for _, cookie := range jar {
 		if cookie.Name == "__Secure-next-auth.session-token" {
 			auth.AuthResult.FreshToken = cookie.Value
@@ -411,7 +418,50 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 	return nil
 }
 
-func (auth *Authenticator) GetAccessToken() string {
+func (auth *Authenticator) GetAccessTokenByRefreshToken(freshToken string) *Error {
+	logger.Log.Debug("GetAccessTokenByRefreshToken")
+	sessionUrl := "https://" + common.Env.OpenAI_HOST + "/api/auth/session"
+
+	req, _ := http.NewRequest("GET", sessionUrl, nil)
+	cookies := &http.Cookie{
+		Name:  "__Secure-next-auth.session-token",
+		Value: freshToken,
+	}
+	req.AddCookie(cookies)
+
+	// Set user agent
+	req.Header.Set("User-Agent", auth.UserAgent)
+
+	resp, err := auth.Session.Do(req)
+	if err != nil {
+		return NewError("GetAccessTokenByRefreshToken", 0, "Failed to send request", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return NewError("GetAccessTokenByRefreshToken", resp.StatusCode, "Incorrect response code", fmt.Errorf("error: Check details"))
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return NewError("GetAccessTokenByRefreshToken", 0, "", err)
+	}
+
+	// Check if access token in data
+	if _, ok := result["accessToken"]; !ok {
+		resultString := fmt.Sprintf("%v", result)
+		return NewError("GetAccessTokenByRefreshToken", 0, resultString, fmt.Errorf("missing access token"))
+	}
+	cookieUrl, _ := url.Parse("https://" + common.Env.OpenAI_HOST + "")
+	jar := auth.Session.GetCookies(cookieUrl)
+	auth.AuthResult.AccessToken = result
+	for _, cookie := range jar {
+		if cookie.Name == "__Secure-next-auth.session-token" {
+			auth.AuthResult.FreshToken = cookie.Value
+		}
+	}
+	return nil
+}
+
+func (auth *Authenticator) GetAccessToken() map[string]interface{} {
 	logger.Log.Debug("GetAccessToken")
 	return auth.AuthResult.AccessToken
 }
@@ -420,22 +470,57 @@ func (auth *Authenticator) GetRefreshToken() string {
 	logger.Log.Debug("GetRefreshToken")
 	return auth.AuthResult.FreshToken
 }
+func (auth *Authenticator) GetModels() (map[string]interface{}, *Error) {
+	logger.Log.Debug("GetModels")
+	if len(auth.AuthResult.AccessToken) == 0 {
+		return nil, NewError("get_model", 0, "Missing access token", fmt.Errorf("error: Check details"))
+	}
+	// Make request to https://"+common.Env.OpenAI_HOST+"/backend-api/models
+	req, _ := http.NewRequest("GET", "https://"+common.Env.OpenAI_HOST+"/backend-api/models", nil)
+	// Add headers
+	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken["accessToken"].(string))
+	req.Header.Add("User-Agent", auth.UserAgent)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
+	req.Header.Add("Connection", "keep-alive")
+
+	resp, err := auth.Session.Do(req)
+	if err != nil {
+		return nil, NewError("get_model", 0, "Failed to make request", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, NewError("get_model", resp.StatusCode, "Failed to make request", fmt.Errorf("error: Check details"))
+	}
+	var responseBody map[string]interface{}
+	r, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, NewError("get_model", resp.StatusCode, "Failed to get response", fmt.Errorf("error: Check details"))
+	}
+	if err := json.Unmarshal(r, &responseBody); err != nil {
+		return nil, NewError("get_model", resp.StatusCode, "Failed to get response", fmt.Errorf("error: Check details"))
+	}
+	auth.AuthResult.Model = responseBody
+	return responseBody, nil
+}
 
 func (auth *Authenticator) GetPUID() (string, *Error) {
 	logger.Log.Debug("GetPUID")
 	// Check if user has access token
-	if auth.AuthResult.AccessToken == "" {
+	if len(auth.AuthResult.AccessToken) == 0 {
 		return "", NewError("get_puid", 0, "Missing access token", fmt.Errorf("error: Check details"))
 	}
-	// Make request to https://chat.openai.com/backend-api/models
-	req, _ := http.NewRequest("GET", "https://chat.openai.com/backend-api/models", nil)
+	// Make request to https://"+common.Env.OpenAI_HOST+"/backend-api/models
+	req, _ := http.NewRequest("GET", "https://"+common.Env.OpenAI_HOST+"/backend-api/models", nil)
 	// Add headers
-	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken)
+	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken["accessToken"].(string))
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://chat.openai.com/")
-	req.Header.Add("Origin", "https://chat.openai.com")
+	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
 	req.Header.Add("Connection", "keep-alive")
 
 	resp, err := auth.Session.Do(req)
@@ -464,7 +549,7 @@ func (auth *Authenticator) GetAuthResult() AuthResult {
 
 func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
 	logger.Log.Debug("getLoginArkoseToken")
-	tokenUrl := "https://tcr9i.chat.openai.com/fc/gt2/public_key/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"
+	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"
 	tokenData := url.Values{
 		"public_key":   {"0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"},
 		"site":         {"https://auth0.openai.com"},
@@ -481,8 +566,8 @@ func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://chat.openai.com/")
-	req.Header.Add("Origin", "https://chat.openai.com")
+	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
 	req.Header.Add("Connection", "keep-alive")
 	resp, err := auth.Session.Do(req)
 	defer resp.Body.Close()
@@ -503,10 +588,10 @@ func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
 }
 func (auth *Authenticator) GetArkoseToken() (*ArkoseToken, *Error) {
 	logger.Log.Debug("GetArkoseToken")
-	tokenUrl := "https://tcr9i.chat.openai.com/fc/gt2/public_key/35536E1E-65B4-4D96-9D97-6ADB7EFF8147"
+	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/35536E1E-65B4-4D96-9D97-6ADB7EFF8147"
 	tokenData := url.Values{
 		"public_key":   {"35536E1E-65B4-4D96-9D97-6ADB7EFF8147"},
-		"site":         {"https://chat.openai.com"},
+		"site":         {"https://" + common.Env.OpenAI_HOST + ""},
 		"userbrowser":  {common.Env.UserAgent},
 		"capi_version": {"2.3.0"},
 		"capi_mode":    {"inline"},
@@ -520,8 +605,8 @@ func (auth *Authenticator) GetArkoseToken() (*ArkoseToken, *Error) {
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://chat.openai.com/")
-	req.Header.Add("Origin", "https://chat.openai.com")
+	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
 	req.Header.Add("Connection", "keep-alive")
 	resp, err := auth.Session.Do(req)
 	defer resp.Body.Close()
