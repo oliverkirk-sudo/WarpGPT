@@ -286,7 +286,7 @@ func (auth *Authenticator) partFour(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	token, _ := auth.getLoginArkoseToken()
+	token, _ := auth.GetLoginArkoseToken()
 	cookie := &http.Cookie{
 		Name:  "arkoseToken",
 		Value: token.Token,
@@ -462,7 +462,7 @@ func (auth *Authenticator) GetAuthResult() AuthResult {
 	return auth.AuthResult
 }
 
-func (auth *Authenticator) getLoginArkoseToken() (*ArkoseToken, *Error) {
+func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
 	logger.Log.Debug("getLoginArkoseToken")
 	tokenUrl := "https://tcr9i.chat.openai.com/fc/gt2/public_key/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"
 	tokenData := url.Values{
@@ -507,7 +507,7 @@ func (auth *Authenticator) GetArkoseToken() (*ArkoseToken, *Error) {
 	tokenData := url.Values{
 		"public_key":   {"35536E1E-65B4-4D96-9D97-6ADB7EFF8147"},
 		"site":         {"https://chat.openai.com"},
-		"userbrowser":  {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"},
+		"userbrowser":  {common.Env.UserAgent},
 		"capi_version": {"2.3.0"},
 		"capi_mode":    {"inline"},
 		"style_theme":  {"default"},
