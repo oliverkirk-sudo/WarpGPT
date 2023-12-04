@@ -182,14 +182,15 @@ type ApiRespStrStream struct {
 	Choices           []StreamChoice `json:"choices"`
 }
 type ApiRespStrStreamEnd struct {
-	Id      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
+	Id                string      `json:"id"`
+	Object            string      `json:"object"`
+	Created           int64       `json:"created"`
+	Model             string      `json:"model"`
+	SystemFingerprint interface{} `json:"system_fingerprint"`
+	Choices           []struct {
+		Index int `json:"index"`
 		Delta struct {
 		} `json:"delta"`
-		Index        int    `json:"index"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 }
@@ -400,12 +401,21 @@ func IdGenerator() string {
 }
 func GetApiRespStrStream(id string) *ApiRespStrStream {
 	jsonStr := `{
-    "id": "chatcmpl-123",
+    "id": "chatcmpl-8S5Y42w6FmenWEVTFK4CrH9BUiRka",
     "object": "chat.completion.chunk",
-    "created": 123,
-    "model": "gpt-3.5-turbo",
-	"system_fingerprint":null,
-    "choices": []
+    "created": 1701705204,
+    "model": "gpt-3.5-turbo-0613",
+    "system_fingerprint": null,
+    "choices": [
+        {
+            "index": 0,
+            "delta": {
+                "role": "assistant",
+                "content": ""
+            },
+            "finish_reason": null
+        }
+    ]
 }`
 	t := new(ApiRespStrStream)
 	err := json.Unmarshal([]byte(jsonStr), &t)
@@ -418,11 +428,18 @@ func GetApiRespStrStream(id string) *ApiRespStrStream {
 }
 func GetApiRespStrStreamEnd(id string) *ApiRespStrStreamEnd {
 	jsonStr := `{
-    "id": "chatcmpl-123",
+    "id": "chatcmpl-8S5Y42w6FmenWEVTFK4CrH9BUiRka",
     "object": "chat.completion.chunk",
-    "created": 123,
-    "model": "gpt-3.5-turbo",
-    "choices": []
+    "created": 1701705204,
+    "model": "gpt-3.5-turbo-0613",
+    "system_fingerprint": null,
+    "choices": [
+        {
+            "index": 0,
+            "delta": {},
+            "finish_reason": "stop"
+        }
+    ]
 }`
 	t := new(ApiRespStrStreamEnd)
 	err := json.Unmarshal([]byte(jsonStr), &t)

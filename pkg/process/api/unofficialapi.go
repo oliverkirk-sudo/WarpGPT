@@ -5,8 +5,14 @@ import (
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/requestbody"
+	"WarpGPT/pkg/tools"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	http "github.com/bogdanfinn/fhttp"
+	"io"
+	shttp "net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +40,7 @@ func (p *UnofficialApiProcess) GetConversation() requestbody.Conversation {
 }
 
 func (p *UnofficialApiProcess) ProcessMethod() {
+	logger.Log.Debug("UnofficialApiProcess")
 	var requestBody map[string]interface{}
 	err := process.DecodeRequestBody(p, &requestBody)
 	if err != nil {
@@ -63,84 +70,231 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 }
 
 func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{}) error {
-	logger.Log.Debug("imageApiProcess")
-	if err := process.ProcessConversationRequest(p, &requestBody, jsonImageProcess); err != nil {
-		return err
-	}
+	logger.Log.Debug("UnofficialApiProcess imageApiProcess")
+
 	return nil
 }
 
 func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}) error {
-	logger.Log.Debug("chatApiProcess")
+	logger.Log.Debug("UnofficialApiProcess chatApiProcess")
 
 	value, exists := requestBody["stream"]
-	reqModel, err := checkModel(model)
+	reqModel, err := p.checkModel(model)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
 	}
 	req := common.GetChatReqStr(reqModel)
-	if err := generateBody(req, requestBody); err != nil {
+	if err = p.generateBody(req, requestBody); err != nil {
 		return err
 	}
 	jsonData, _ := json.Marshal(req)
-	var request map[string]interface{}
-	err = json.Unmarshal(jsonData, &request)
+	var requestData map[string]interface{}
+	err = json.Unmarshal(jsonData, &requestData)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
 	}
+	request, err := p.createRequest(requestData) //创建请求
+	if err != nil {
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server error"})
+		return err
+	}
+	response, err := p.GetConversation().RequestClient.Do(request)        //发送请求
+	process.CopyResponseHeaders(response, p.GetConversation().GinContext) //设置响应头
+	if err != nil {
+		var responseBody interface{}
+		err = json.NewDecoder(response.Body).Decode(&responseBody)
+		if err != nil {
+			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
+			return err
+		}
+		p.GetConversation().GinContext.JSON(response.StatusCode, responseBody)
+		return err
+	}
 	if exists && value.(bool) {
-		if err := process.ProcessConversationRequest(p, &request, streamChatProcess); err != nil {
-			println(err.Error())
+		err = p.streamResponse(response)
+		if err != nil {
 			return err
 		}
 	} else {
-		if err := process.ProcessConversationRequest(p, &request, jsonChatProcess); err != nil {
+		err = p.jsonResponse(response)
+		if err != nil {
 			return err
 		}
 	}
 
 	return nil
 }
+func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
+	logger.Log.Debug("UnofficialApiProcess createRequest")
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, err
+	}
+	var request *http.Request
+	if p.Conversation.RequestBody == shttp.NoBody {
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
+	} else {
+		err = p.addArkoseTokenIfNeeded(&requestBody)
+		fmt.Printf("%+v\n", requestBody)
+		if err != nil {
+			return nil, err
+		}
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.buildHeaders(request)
+	p.setCookies(request)
+	return request, nil
+}
+func (p *UnofficialApiProcess) setCookies(request *http.Request) {
+	logger.Log.Debug("UnofficialApiProcess setCookies")
+	for _, cookie := range p.GetConversation().GinContext.Request.Cookies() {
+		request.AddCookie(&http.Cookie{
+			Name:  cookie.Name,
+			Value: cookie.Value,
+		})
+	}
+}
+func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
+	logger.Log.Debug("UnofficialApiProcess buildHeaders")
+	headers := map[string]string{
+		"Host":          common.Env.OpenAI_HOST,
+		"Origin":        "https://" + common.Env.OpenAI_HOST + "/chat",
+		"Authorization": p.GetConversation().GinContext.Request.Header.Get("Authorization"),
+		"Connection":    "keep-alive",
+		"User-Agent":    common.Env.UserAgent,
+		"Content-Type":  p.GetConversation().GinContext.Request.Header.Get("Content-Type"),
+	}
 
-func streamChatProcess(raw string) string {
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+
+	if puid := p.GetConversation().GinContext.Request.Header.Get("PUID"); puid != "" {
+		request.Header.Set("cookie", "_puid="+puid+";")
+	}
+}
+func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {
+	logger.Log.Debug("UnofficialApiProcess addArkoseTokenIfNeeded")
+	models := (*requestBody)["model"].(string)
+	if strings.HasPrefix(models, "gpt-4") {
+		token, err := tools.NewAuthenticator("", "", "").GetLoginArkoseToken()
+		if err != nil {
+			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
+			return err.Error
+		}
+		(*requestBody)["arkose_token"] = token.Token
+	}
+	return nil
+}
+func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
-	result := getStreamResp(jsonData)
+	result := p.getStreamResp(jsonData)
 	if strings.Contains(raw, "[DONE]") {
 		return raw
+	} else if result.Pass {
+		return ""
 	} else if result.ApiRespStrStreamEnd.Id != "" {
-		jsonData, err := json.Marshal(result.ApiRespStrStreamEnd)
+		data, err := json.Marshal(result.ApiRespStrStreamEnd)
 		if err != nil {
 			logger.Log.Fatal(err)
 		}
-		return "data: " + string(jsonData) + "\n\n"
+		return "data: " + string(data) + "\n\n"
 	} else if result.ApiRespStrStream.Id != "" {
-		jsonData, err := json.Marshal(result.ApiRespStrStream)
+		data, err := json.Marshal(result.ApiRespStrStream)
 		if err != nil {
 			logger.Log.Fatal(err)
 		}
-		return "data: " + string(jsonData) + "\n\n"
+		return "data: " + string(data) + "\n\n"
 	}
 	return ""
 }
-func jsonChatProcess(raw string) string {
+func (p *UnofficialApiProcess) streamResponse(response *http.Response) error {
+	logger.Log.Debug("UnofficialApiProcess streamResponse")
+	defer response.Body.Close()
+	var accumulatedData strings.Builder
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			accumulatedData.Write(buf[:n])
+			if strings.HasSuffix(accumulatedData.String(), "\n\n") || strings.Contains(accumulatedData.String(), "[DONE]") {
+				data := p.streamChatProcess(accumulatedData.String())
+				if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
+					return err
+				}
+				p.GetConversation().GinContext.Writer.Flush()
+				accumulatedData.Reset()
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		select {
+		case <-p.GetConversation().GinContext.Writer.CloseNotify():
+			return nil
+		default:
+		}
+	}
+	return nil
+}
+func (p *UnofficialApiProcess) jsonResponse(response *http.Response) error {
+	logger.Log.Debug("UnofficialApiProcess jsonResponse")
+	defer response.Body.Close()
+	var accumulatedData strings.Builder
+	buf := make([]byte, 1024)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			accumulatedData.Write(buf[:n])
+			if strings.HasSuffix(accumulatedData.String(), "\n\n") || strings.Contains(accumulatedData.String(), "[DONE]") {
+				data := p.jsonChatProcess(accumulatedData.String())
+				if data != nil {
+					p.GetConversation().GinContext.Header("Content-Type", "application/json")
+					p.GetConversation().GinContext.JSON(response.StatusCode, data)
+					return nil
+				}
+				accumulatedData.Reset()
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		select {
+		case <-p.GetConversation().GinContext.Writer.CloseNotify():
+			return nil
+		default:
+		}
+	}
+	return nil
+}
+func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
 	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
-	getStreamResp(jsonData)
+	p.getStreamResp(jsonData)
 	if strings.Contains(raw, "[DONE]") {
 		resp := common.GetApiRespStr(id)
 		choice := common.GetStrChoices()
 		choice.Message.Content = oldString
 		resp.Choices = append(resp.Choices, *choice)
 		resp.Model = model
-		data, _ := json.Marshal(resp)
-		return string(data)
+		return resp
 	}
-	return ""
+	return nil
 }
-func jsonImageProcess(raw string) string {
+func (p *UnofficialApiProcess) jsonImageProcess(raw string) string {
 	println(raw)
 	return raw
 }
-func getStreamResp(stream string) *Result {
+func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 	var chatRespStr common.ChatRespStr
 	var chatEndRespStr common.ChatEndRespStr
 	result := &Result{
@@ -155,6 +309,7 @@ func getStreamResp(stream string) *Result {
 		resp.Model = model
 		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], oldString, "")
 		oldString = chatRespStr.Message.Content.Parts[0]
+		resp.Choices = resp.Choices[:0]
 		resp.Choices = append(resp.Choices, *choice)
 		result.ApiRespStrStream = *resp
 	}
@@ -174,8 +329,8 @@ func getStreamResp(stream string) *Result {
 	}
 	return result
 }
-func checkModel(model string) (string, error) {
-	logger.Log.Debug("checkModel")
+func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
+	logger.Log.Debug("UnofficialApiProcess checkModel")
 	if strings.HasPrefix(model, "dalle") || strings.HasPrefix(model, "gpt-4-vision") {
 		return "gpt-4", nil
 	} else if strings.HasPrefix(model, "gpt-3") {
@@ -186,9 +341,7 @@ func checkModel(model string) (string, error) {
 		return "", errors.New("unsupported model")
 	}
 }
-func generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
-	reqMessage := common.GetChatReqTemplate()
-	reqFileMessage := common.GetChatFileReqTemplate()
+func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
 	messageList, exists := requestBody["messages"]
 	if !exists {
 		return errors.New("no message body")
@@ -200,22 +353,24 @@ func generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) er
 		role, _ := messageItem["role"].(string)
 		if _, ok := messageItem["content"].(string); ok {
 			content, _ := messageItem["content"].(string)
+			reqMessage := common.GetChatReqTemplate()
 			reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
 			reqMessage.Author.Role = role
 			reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
 			req.Messages = append(req.Messages, *reqMessage)
 		}
 		if _, ok := messageItem["content"].([]map[string]interface{}); ok {
+			reqFileMessage := common.GetChatFileReqTemplate()
 			content, _ := messageItem["content"].([]map[string]interface{})
 			reqFileMessage.Content.Parts = reqFileMessage.Content.Parts[:0]
 			reqFileMessage.Author.Role = role
-			fileReqProcess(&content, &reqFileMessage.Content.Parts)
+			p.fileReqProcess(&content, &reqFileMessage.Content.Parts)
 			//reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
 			//req.Messages = append(req.Messages, *reqFileMessage)
 		}
 	}
 	return nil
 }
-func fileReqProcess(content *[]map[string]interface{}, part *[]interface{}) {
+func (p *UnofficialApiProcess) fileReqProcess(content *[]map[string]interface{}, part *[]interface{}) {
 
 }

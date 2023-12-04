@@ -6,9 +6,11 @@ import (
 	"WarpGPT/pkg/requestbody"
 	"bytes"
 	"encoding/json"
-
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
+	"io"
+	shttp "net/http"
+	"strings"
 )
 
 type OfficialApiProcess struct {
@@ -23,46 +25,47 @@ func (p *OfficialApiProcess) GetConversation() requestbody.Conversation {
 }
 func (p *OfficialApiProcess) ProcessMethod() {
 	var requestBody map[string]interface{}
-	err := process.DecodeRequestBody(p, &requestBody)
+	err := process.DecodeRequestBody(p, &requestBody) //解析请求体
 	if err != nil {
-		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Json Error"})
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Incorrect json format"})
 		return
 	}
-	request, err := createRequest(p, requestBody)
+
+	request, err := p.createRequest(requestBody) //创建请求
 	if err != nil {
 		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return
 	}
-	response, err := p.GetConversation().RequestClient.Do(request)
+
+	response, err := p.GetConversation().RequestClient.Do(request) //发送请求
 	if err != nil {
 		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server Error"})
 		return
 	}
 
-	process.CopyResponseHeaders(response, p.GetConversation().GinContext)
+	process.CopyResponseHeaders(response, p.GetConversation().GinContext) //设置响应头
 
-	if _, exists := requestBody["stream"].(bool); exists {
-		err := process.StreamResponse(p, response, func(a string) string {
-			return a
-		})
+	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		err := p.streamResponse(response)
 		if err != nil {
-			logger.Log.Fatal(err)
+			return
 		}
-	} else {
-		err := process.SendJsonResponse(p, response)
+	}
+	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
+		err := p.jsonResponse(response)
 		if err != nil {
 			logger.Log.Fatal(err)
 		}
 	}
 }
 
-func createRequest(p *OfficialApiProcess, requestBody map[string]interface{}) (*http.Request, error) {
+func (p *OfficialApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, err
 	}
 	var request *http.Request
-	if p.Conversation.RequestBody == http.NoBody {
+	if p.Conversation.RequestBody == shttp.NoBody {
 		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
 	} else {
 		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
@@ -70,7 +73,51 @@ func createRequest(p *OfficialApiProcess, requestBody map[string]interface{}) (*
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("Authorization", p.Conversation.GinContext.Request.Header.Get("Authorization"))
-	request.Header.Set("Content-Type", "application/json")
+	p.setHeaders(request)
 	return request, nil
+}
+
+func (p *OfficialApiProcess) setHeaders(rsq *http.Request) {
+	rsq.Header.Set("Authorization", p.Conversation.RequestHeaders.Get("Authorization"))
+	rsq.Header.Set("Content-Type", p.Conversation.RequestHeaders.Get("Content-Type"))
+	rsq.Header.Set("Access-Control-Request-Method", p.Conversation.RequestHeaders.Get("Access-Control-Request-Method"))
+	rsq.Header.Set("Access-Control-Request-Headers", p.Conversation.RequestHeaders.Get("Access-Control-Request-Headers"))
+}
+
+func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
+	var jsonData interface{}
+	err := json.NewDecoder(response.Body).Decode(&jsonData)
+	if err != nil {
+		return err
+	}
+	p.GetConversation().GinContext.JSON(response.StatusCode, jsonData)
+	return nil
+}
+
+func (p *OfficialApiProcess) streamResponse(response *http.Response) error {
+	logger.Log.Infoln("officialApiProcess stream Request")
+	defer response.Body.Close()
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, err := p.GetConversation().GinContext.Writer.Write(buf[:n]); err != nil {
+				return err
+			}
+			p.GetConversation().GinContext.Writer.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		select {
+		case <-p.GetConversation().GinContext.Writer.CloseNotify():
+			return nil
+		default:
+		}
+	}
+	return nil
 }
