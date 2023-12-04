@@ -7,17 +7,19 @@ import (
 	"WarpGPT/pkg/requestbody"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/gin-gonic/gin"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 var id string
 var model string
+var oldString = ""
 
 type UnofficialApiProcess struct {
 	process.Process
 }
+
 type Result struct {
 	ApiRespStrStream    common.ApiRespStrStream
 	ApiRespStrStreamEnd common.ApiRespStrStreamEnd
@@ -77,17 +79,22 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
 	}
 	req := common.GetChatReqStr(reqModel)
-	err = generateBody(req, requestBody)
-	fmt.Printf("---%+v\n", *req)
+	if err := generateBody(req, requestBody); err != nil {
+		return err
+	}
+	jsonData, _ := json.Marshal(req)
+	var request map[string]interface{}
+	err = json.Unmarshal(jsonData, &request)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
 	}
-	if exists && value.(bool) == true {
-		if err := process.ProcessConversationRequest(p, &requestBody, streamChatProcess); err != nil {
+	if exists && value.(bool) {
+		if err := process.ProcessConversationRequest(p, &request, streamChatProcess); err != nil {
+			println(err.Error())
 			return err
 		}
 	} else {
-		if err := process.ProcessConversationRequest(p, &requestBody, jsonChatProcess); err != nil {
+		if err := process.ProcessConversationRequest(p, &request, jsonChatProcess); err != nil {
 			return err
 		}
 	}
@@ -96,28 +103,44 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 }
 
 func streamChatProcess(raw string) string {
-	jsonData := strings.Trim(strings.SplitN(raw, ":", 1)[1], "\n")
-	result := checkStreamClass(jsonData)
-	if result.Pass {
+	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
+	result := getStreamResp(jsonData)
+	if strings.Contains(raw, "[DONE]") {
 		return raw
+	} else if result.ApiRespStrStreamEnd.Id != "" {
+		jsonData, err := json.Marshal(result.ApiRespStrStreamEnd)
+		if err != nil {
+			logger.Log.Fatal(err)
+		}
+		return "data: " + string(jsonData) + "\n\n"
+	} else if result.ApiRespStrStream.Id != "" {
+		jsonData, err := json.Marshal(result.ApiRespStrStream)
+		if err != nil {
+			logger.Log.Fatal(err)
+		}
+		return "data: " + string(jsonData) + "\n\n"
 	}
-	if result.ApiRespStrStreamEnd.Id != "" {
-		return raw
-	}
-	if result.ApiRespStrStream.Id != "" {
-		return raw
-	}
-	return raw
+	return ""
 }
 func jsonChatProcess(raw string) string {
-	println(raw)
-	return raw
+	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
+	getStreamResp(jsonData)
+	if strings.Contains(raw, "[DONE]") {
+		resp := common.GetApiRespStr(id)
+		choice := common.GetStrChoices()
+		choice.Message.Content = oldString
+		resp.Choices = append(resp.Choices, *choice)
+		resp.Model = model
+		data, _ := json.Marshal(resp)
+		return string(data)
+	}
+	return ""
 }
 func jsonImageProcess(raw string) string {
 	println(raw)
 	return raw
 }
-func checkStreamClass(stream string) *Result {
+func getStreamResp(stream string) *Result {
 	var chatRespStr common.ChatRespStr
 	var chatEndRespStr common.ChatEndRespStr
 	result := &Result{
@@ -128,7 +151,11 @@ func checkStreamClass(stream string) *Result {
 	json.Unmarshal([]byte(stream), &chatRespStr)
 	if chatRespStr.Message.Id != "" {
 		resp := common.GetApiRespStrStream(id)
+		choice := common.GetStreamChoice()
 		resp.Model = model
+		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], oldString, "")
+		oldString = chatRespStr.Message.Content.Parts[0]
+		resp.Choices = append(resp.Choices, *choice)
 		result.ApiRespStrStream = *resp
 	}
 	json.Unmarshal([]byte(stream), &chatEndRespStr)
@@ -138,6 +165,10 @@ func checkStreamClass(stream string) *Result {
 		result.ApiRespStrStreamEnd = *resp
 	}
 	if result.ApiRespStrStream.Id == "" && result.ApiRespStrStreamEnd.Id == "" {
+		result.Pass = true
+		return result
+	}
+	if chatRespStr.Message.Metadata.ParentId == "" {
 		result.Pass = true
 		return result
 	}

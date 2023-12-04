@@ -8,12 +8,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	fhttp "github.com/bogdanfinn/fhttp"
-	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	fhttp "github.com/bogdanfinn/fhttp"
+	"github.com/gin-gonic/gin"
 )
 
 type Process struct {
@@ -37,7 +38,6 @@ type ProcessInterface interface {
 func DecodeRequestBody(p ProcessInterface, requestBody *map[string]interface{}) error {
 	conversation := p.GetConversation()
 	if conversation.RequestBody != http.NoBody {
-		println("----------------")
 		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
 			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
 			return err
@@ -56,7 +56,6 @@ func ProcessConversationRequest(p ProcessInterface, requestBody *map[string]inte
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
 	err = StreamResponse(p, response, mid)
 	if err != nil {
 		return err
@@ -98,7 +97,7 @@ func makeRequest(p ProcessInterface, requestBody *map[string]interface{}) (*fhtt
 		return nil, err
 	}
 	var request *fhttp.Request
-	if len(*requestBody) == 0 {
+	if p.GetConversation().RequestBody == http.NoBody {
 		logger.Log.Debug("Empty requestBody")
 		request, _ = fhttp.NewRequest(p.GetConversation().RequestMethod, p.GetConversation().RequestUrl, nil)
 	} else {
@@ -120,12 +119,10 @@ func makeRequest(p ProcessInterface, requestBody *map[string]interface{}) (*fhtt
 func StreamResponse(p ProcessInterface, response *fhttp.Response, mid func(a string) string) error {
 	logger.Log.Infoln("Stream Request")
 	defer response.Body.Close()
-
 	var accumulatedData strings.Builder
-
 Loop:
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 512)
 		n, err := response.Body.Read(buf)
 		if n > 0 {
 			accumulatedData.Write(buf[:n])
@@ -164,6 +161,9 @@ func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {
 		if name == "Content-Encoding" {
 			continue
 		}
+		if name == "Content-Length" {
+			continue
+		}
 		for _, value := range values {
 			ctx.Header(name, value)
 		}
@@ -188,6 +188,10 @@ func SendJsonResponse(p ProcessInterface, response *fhttp.Response) error {
 	defer response.Body.Close()
 	err := json.NewDecoder(response.Body).Decode(&responseBody)
 	if err != nil {
+		if err == io.EOF {
+			p.GetConversation().GinContext.JSON(200, gin.H{})
+			return nil
+		}
 		p.GetConversation().GinContext.JSON(response.StatusCode, response.Body)
 		return err
 	}

@@ -29,9 +29,9 @@ func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 }
 func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://" + Env.OpenAI_HOST + "/backend-api" + path
+		return "https://" + Env.OpenAI_HOST + "/backend-api" + "/conversation"
 	}
-	return "https://" + Env.OpenAI_HOST + "/backend-api" + path + "?" + rawquery
+	return "https://" + Env.OpenAI_HOST + "/backend-api" + "/conversation" + "?" + rawquery
 }
 func (u ReverseApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
@@ -49,7 +49,7 @@ func (u ReversePublicApiRequestUrl) Generate(path string, rawquery string) strin
 	if rawquery == "" {
 		return "https://" + Env.OpenAI_HOST + "/public-api" + path
 	}
-	return "https://" + Env.OpenAI_HOST + "/public-api/" + path + "?" + rawquery
+	return "https://" + Env.OpenAI_HOST + "/public-api" + path + "?" + rawquery
 }
 
 func (u NotHaveUrl) Generate(path string, rawquery string) string {

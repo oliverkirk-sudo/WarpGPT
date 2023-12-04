@@ -6,6 +6,7 @@ import (
 	"WarpGPT/pkg/process/reverse"
 	"WarpGPT/pkg/process/session"
 	"WarpGPT/pkg/requestbody"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,7 +43,15 @@ func main() {
 		var p session.SessionToken
 		process.Do(&p, conversation)
 	})
-	router.Any("/r/v1/*path", func(c *gin.Context) {
+	router.OPTIONS("/r/v1/*path", func(c *gin.Context) {
+		c.JSON(200, gin.H{})
+	})
+	router.POST("/r/v1/*path", func(c *gin.Context) {
+		conversation := requestbody.GetConversation(c)
+		var p api.UnofficialApiProcess
+		process.Do(&p, conversation)
+	})
+	router.GET("/r/v1/*path", func(c *gin.Context) {
 		conversation := requestbody.GetConversation(c)
 		var p api.UnofficialApiProcess
 		process.Do(&p, conversation)

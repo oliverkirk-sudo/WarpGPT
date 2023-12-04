@@ -6,6 +6,7 @@ import (
 	"WarpGPT/pkg/requestbody"
 	"bytes"
 	"encoding/json"
+
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
 )
@@ -60,12 +61,15 @@ func createRequest(p *OfficialApiProcess, requestBody map[string]interface{}) (*
 	if err != nil {
 		return nil, err
 	}
-
-	request, err := http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
+	var request *http.Request
+	if p.Conversation.RequestBody == http.NoBody {
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
+	} else {
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
+	}
 	if err != nil {
 		return nil, err
 	}
-
 	request.Header.Set("Authorization", p.Conversation.GinContext.Request.Header.Get("Authorization"))
 	request.Header.Set("Content-Type", "application/json")
 	return request, nil

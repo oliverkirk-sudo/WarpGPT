@@ -3,26 +3,15 @@ package common
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"log"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-//	type ChatReqTemplate struct {
-//		Id     string `json:"id"`
-//		Author struct {
-//			Role string `json:"role"`
-//		} `json:"author"`
-//		Content struct {
-//			ContentType string   `json:"content_type"`
-//			Parts       []string `json:"parts"`
-//		} `json:"content"`
-//		Metadata struct {
-//		} `json:"metadata"`
-//	}
 type ChatReqTemplate struct {
 	Id     string `json:"id"`
 	Author struct {
@@ -32,9 +21,7 @@ type ChatReqTemplate struct {
 		ContentType string        `json:"content_type"`
 		Parts       []interface{} `json:"parts"`
 	} `json:"content"`
-	Metadata struct {
-		Attachments []interface{} `json:"attachments"`
-	} `json:"metadata"`
+	Metadata interface{} `json:"metadata"`
 }
 type ChatReqStr struct {
 	Action                     string            `json:"action"`
@@ -42,7 +29,6 @@ type ChatReqStr struct {
 	ParentMessageId            string            `json:"parent_message_id"`
 	Model                      string            `json:"model"`
 	TimezoneOffsetMin          int               `json:"timezone_offset_min"`
-	Suggestions                []interface{}     `json:"suggestions"`
 	HistoryAndTrainingDisabled bool              `json:"history_and_training_disabled"`
 	ArkoseToken                string            `json:"arkose_token"`
 	ConversationMode           struct {
@@ -159,39 +145,41 @@ type DALLERespStr struct {
 	ConversationId string      `json:"conversation_id"`
 	Error          interface{} `json:"error"`
 }
+type StrChoices struct {
+	Index   int `json:"index"`
+	Message struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"message"`
+	FinishReason string `json:"finish_reason"`
+}
 type ApiRespStr struct {
-	Id                string `json:"id"`
-	Object            string `json:"object"`
-	Created           int64  `json:"created"`
-	Model             string `json:"model"`
-	SystemFingerprint string `json:"system_fingerprint"`
-	Choices           []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
+	Id                string       `json:"id"`
+	Object            string       `json:"object"`
+	Created           int64        `json:"created"`
+	Model             string       `json:"model"`
+	SystemFingerprint string       `json:"system_fingerprint"`
+	Choices           []StrChoices `json:"choices"`
+	Usage             struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 }
+type StreamChoice struct {
+	Delta struct {
+		Content string `json:"content"`
+	} `json:"delta"`
+	Index        int         `json:"index"`
+	FinishReason interface{} `json:"finish_reason"`
+}
 type ApiRespStrStream struct {
-	Id                string `json:"id"`
-	Object            string `json:"object"`
-	Created           int64  `json:"created"`
-	Model             string `json:"model"`
-	SystemFingerprint string `json:"system_fingerprint"`
-	Choices           []struct {
-		Delta struct {
-			Content string `json:"content"`
-		} `json:"delta"`
-		Index        int         `json:"index"`
-		FinishReason interface{} `json:"finish_reason"`
-	} `json:"choices"`
+	Id                string         `json:"id"`
+	Object            string         `json:"object"`
+	Created           int64          `json:"created"`
+	Model             string         `json:"model"`
+	SystemFingerprint string         `json:"system_fingerprint"`
+	Choices           []StreamChoice `json:"choices"`
 }
 type ApiRespStrStreamEnd struct {
 	Id      string `json:"id"`
@@ -228,7 +216,6 @@ func GetChatReqStr(model string) *ChatReqStr {
         "parent_message_id": "",
         "model": "gpt-4-code-interpreter",
         "timezone_offset_min": -480,
-        "suggestions": [],
         "history_and_training_disabled": true,
         "arkose_token": "",
         "conversation_mode": {
@@ -307,7 +294,7 @@ func GetChatRespStr() *ChatRespStr {
             "update_time": null,
             "content": {
                 "content_type": "text",
-                "parts": [""]
+                "parts": []
             },
             "status": "finished_successfully",
             "end_turn": true,
@@ -374,7 +361,7 @@ func GetChatUserSystemMsgReqStr() *ChatUserSystemMsgReqStr {
 	}
 	return t
 }
-func GetApiRespStr() *ApiRespStr {
+func GetApiRespStr(id string) *ApiRespStr {
 	jsonStr := `{
     "id": "chatcmpl-8H3JOH8ErCUKSM0KVZ6tHE06T0XLi",
     "object": "chat.completion",
@@ -382,14 +369,6 @@ func GetApiRespStr() *ApiRespStr {
     "model": "gpt-3.5-turbo-0613",
 	"system_fingerprint": null,
     "choices": [
-        {
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": ""
-            },
-            "finish_reason": "stop"
-        }
     ],
     "usage": {
         "prompt_tokens": 0,
@@ -399,7 +378,7 @@ func GetApiRespStr() *ApiRespStr {
 }`
 	t := new(ApiRespStr)
 	err := json.Unmarshal([]byte(jsonStr), &t)
-	t.Id = IdGenerator()
+	t.Id = id
 	t.Created = time.Now().Unix()
 	if err != nil {
 		log.Fatalf("Error parsing JSON: %v", err)
@@ -412,7 +391,7 @@ func IdGenerator() string {
 	var uniqueString strings.Builder
 
 	rand.Seed(time.Now().UnixNano()) // 初始化随机数生成器
-	for i := 0; i < 32; i++ {
+	for i := 0; i < 29; i++ {
 		uniqueString.WriteByte(characters[rand.Intn(len(characters))])
 	}
 
@@ -425,16 +404,8 @@ func GetApiRespStrStream(id string) *ApiRespStrStream {
     "object": "chat.completion.chunk",
     "created": 123,
     "model": "gpt-3.5-turbo",
-	"system_fingerprint":null
-    "choices": [
-        {
-            "delta": {
-                "content": ""
-            },
-            "index": 0,
-            "finish_reason": null
-        }
-    ]
+	"system_fingerprint":null,
+    "choices": []
 }`
 	t := new(ApiRespStrStream)
 	err := json.Unmarshal([]byte(jsonStr), &t)
@@ -451,13 +422,7 @@ func GetApiRespStrStreamEnd(id string) *ApiRespStrStreamEnd {
     "object": "chat.completion.chunk",
     "created": 123,
     "model": "gpt-3.5-turbo",
-    "choices": [
-        {
-            "delta": {},
-            "index": 0,
-            "finish_reason": "stop"
-        }
-    ]
+    "choices": []
 }`
 	t := new(ApiRespStrStreamEnd)
 	err := json.Unmarshal([]byte(jsonStr), &t)
@@ -481,6 +446,37 @@ func GetApiImageGenerationRespStr() *ApiImageGenerationRespStr {
 	t := new(ApiImageGenerationRespStr)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.Created = time.Now().Unix()
+	if err != nil {
+		log.Fatalf("Error parsing JSON: %v", err)
+	}
+	return t
+}
+func GetStreamChoice() *StreamChoice {
+	jsonStr := ` {
+		"index": 0,
+		"delta": {
+			"content": ""
+		},
+		"finish_reason": null
+	}`
+	t := new(StreamChoice)
+	err := json.Unmarshal([]byte(jsonStr), &t)
+	if err != nil {
+		log.Fatalf("Error parsing JSON: %v", err)
+	}
+	return t
+}
+func GetStrChoices() *StrChoices {
+	jsonStr := `{
+		"finish_reason": "stop",
+		"index": 0,
+		"message": {
+			"content": "",
+			"role": "assistant"
+		}
+	}`
+	t := new(StrChoices)
+	err := json.Unmarshal([]byte(jsonStr), &t)
 	if err != nil {
 		log.Fatalf("Error parsing JSON: %v", err)
 	}
