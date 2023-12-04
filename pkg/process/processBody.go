@@ -37,6 +37,7 @@ type ProcessInterface interface {
 func DecodeRequestBody(p ProcessInterface, requestBody *map[string]interface{}) error {
 	conversation := p.GetConversation()
 	if conversation.RequestBody != http.NoBody {
+		println("----------------")
 		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
 			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
 			return err

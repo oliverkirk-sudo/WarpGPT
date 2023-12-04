@@ -6,6 +6,8 @@ import (
 	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/requestbody"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"strings"
 )
@@ -34,6 +36,7 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 	err := process.DecodeRequestBody(p, &requestBody)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
+		return
 	}
 	id = common.IdGenerator()
 	_, exists := requestBody["model"]
@@ -41,41 +44,45 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 		model, _ = requestBody["model"].(string)
 	} else {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Model not provided"})
+		return
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "chat/completions") {
-		if err := p.chatApiProcess(); err != nil {
+		if err := p.chatApiProcess(requestBody); err != nil {
+			println(err.Error())
 			return
 		}
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "images/generations") {
-		if err := p.imageApiProcess(); err != nil {
+		if err := p.imageApiProcess(requestBody); err != nil {
+			println(err.Error())
 			return
 		}
 	}
 }
 
-func (p *UnofficialApiProcess) imageApiProcess() error {
-	var requestBody map[string]interface{}
+func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{}) error {
 	logger.Log.Debug("imageApiProcess")
-
-	if err := process.DecodeRequestBody(p, &requestBody); err != nil {
-		return err
-	}
 	if err := process.ProcessConversationRequest(p, &requestBody, jsonImageProcess); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *UnofficialApiProcess) chatApiProcess() error {
-	var requestBody map[string]interface{}
+func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}) error {
 	logger.Log.Debug("chatApiProcess")
 
-	if err := process.DecodeRequestBody(p, &requestBody); err != nil {
-		return err
-	}
 	value, exists := requestBody["stream"]
-	if exists && value.(string) == "true" {
+	reqModel, err := checkModel(model)
+	if err != nil {
+		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+	}
+	req := common.GetChatReqStr(reqModel)
+	err = generateBody(req, requestBody)
+	fmt.Printf("---%+v\n", *req)
+	if err != nil {
+		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+	}
+	if exists && value.(bool) == true {
 		if err := process.ProcessConversationRequest(p, &requestBody, streamChatProcess); err != nil {
 			return err
 		}
@@ -90,7 +97,16 @@ func (p *UnofficialApiProcess) chatApiProcess() error {
 
 func streamChatProcess(raw string) string {
 	jsonData := strings.Trim(strings.SplitN(raw, ":", 1)[1], "\n")
-	checkStreamClass(jsonData)
+	result := checkStreamClass(jsonData)
+	if result.Pass {
+		return raw
+	}
+	if result.ApiRespStrStreamEnd.Id != "" {
+		return raw
+	}
+	if result.ApiRespStrStream.Id != "" {
+		return raw
+	}
 	return raw
 }
 func jsonChatProcess(raw string) string {
@@ -109,14 +125,14 @@ func checkStreamClass(stream string) *Result {
 		ApiRespStrStreamEnd: common.ApiRespStrStreamEnd{},
 		Pass:                false,
 	}
-	err := json.Unmarshal([]byte(stream), &chatRespStr)
-	if err == nil {
+	json.Unmarshal([]byte(stream), &chatRespStr)
+	if chatRespStr.Message.Id != "" {
 		resp := common.GetApiRespStrStream(id)
 		resp.Model = model
 		result.ApiRespStrStream = *resp
 	}
-	err = json.Unmarshal([]byte(stream), &chatEndRespStr)
-	if err == nil {
+	json.Unmarshal([]byte(stream), &chatEndRespStr)
+	if chatEndRespStr.MessageId != "" {
 		resp := common.GetApiRespStrStreamEnd(id)
 		resp.Model = model
 		result.ApiRespStrStreamEnd = *resp
@@ -126,4 +142,49 @@ func checkStreamClass(stream string) *Result {
 		return result
 	}
 	return result
+}
+func checkModel(model string) (string, error) {
+	logger.Log.Debug("checkModel")
+	if strings.HasPrefix(model, "dalle") || strings.HasPrefix(model, "gpt-4-vision") {
+		return "gpt-4", nil
+	} else if strings.HasPrefix(model, "gpt-3") {
+		return "text-davinci-002-render-sha", nil
+	} else if strings.HasPrefix(model, "gpt-4") {
+		return "gpt-4-gizmo", nil
+	} else {
+		return "", errors.New("unsupported model")
+	}
+}
+func generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
+	reqMessage := common.GetChatReqTemplate()
+	reqFileMessage := common.GetChatFileReqTemplate()
+	messageList, exists := requestBody["messages"]
+	if !exists {
+		return errors.New("no message body")
+	}
+	messages, _ := messageList.([]interface{})
+
+	for _, message := range messages {
+		messageItem, _ := message.(map[string]interface{})
+		role, _ := messageItem["role"].(string)
+		if _, ok := messageItem["content"].(string); ok {
+			content, _ := messageItem["content"].(string)
+			reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
+			reqMessage.Author.Role = role
+			reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
+			req.Messages = append(req.Messages, *reqMessage)
+		}
+		if _, ok := messageItem["content"].([]map[string]interface{}); ok {
+			content, _ := messageItem["content"].([]map[string]interface{})
+			reqFileMessage.Content.Parts = reqFileMessage.Content.Parts[:0]
+			reqFileMessage.Author.Role = role
+			fileReqProcess(&content, &reqFileMessage.Content.Parts)
+			//reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
+			//req.Messages = append(req.Messages, *reqFileMessage)
+		}
+	}
+	return nil
+}
+func fileReqProcess(content *[]map[string]interface{}, part *[]interface{}) {
+
 }

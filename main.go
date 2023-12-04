@@ -42,5 +42,10 @@ func main() {
 		var p session.SessionToken
 		process.Do(&p, conversation)
 	})
+	router.Any("/r/v1/*path", func(c *gin.Context) {
+		conversation := requestbody.GetConversation(c)
+		var p api.UnofficialApiProcess
+		process.Do(&p, conversation)
+	})
 	router.Run()
 }

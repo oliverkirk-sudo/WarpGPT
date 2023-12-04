@@ -19,8 +19,8 @@ func (p *BackendProcess) SetConversation(conversation requestbody.Conversation) 
 }
 
 func (p *BackendProcess) ProcessMethod() {
-	var requestBody map[string]interface{}
 	logger.Log.Debug("ProcessBackendProcess")
+	var requestBody map[string]interface{}
 
 	if err := process.DecodeRequestBody(p, &requestBody); err != nil {
 		return

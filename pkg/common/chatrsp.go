@@ -11,45 +11,19 @@ import (
 	"time"
 )
 
-type ChatReqStr struct {
-	Action   string `json:"action"`
-	Messages []struct {
-		Id     string `json:"id"`
-		Author struct {
-			Role string `json:"role"`
-		} `json:"author"`
-		Content struct {
-			ContentType string   `json:"content_type"`
-			Parts       []string `json:"parts"`
-		} `json:"content"`
-		Metadata struct {
-		} `json:"metadata"`
-	} `json:"messages"`
-	ParentMessageId            string        `json:"parent_message_id"`
-	Model                      string        `json:"model"`
-	TimezoneOffsetMin          int           `json:"timezone_offset_min"`
-	Suggestions                []interface{} `json:"suggestions"`
-	HistoryAndTrainingDisabled bool          `json:"history_and_training_disabled"`
-	ArkoseToken                string        `json:"arkose_token"`
-	ConversationMode           struct {
-		Kind string `json:"kind"`
-	} `json:"conversation_mode"`
-	ForceParagen   bool `json:"force_paragen"`
-	ForceRateLimit bool `json:"force_rate_limit"`
-}
+//	type ChatReqTemplate struct {
+//		Id     string `json:"id"`
+//		Author struct {
+//			Role string `json:"role"`
+//		} `json:"author"`
+//		Content struct {
+//			ContentType string   `json:"content_type"`
+//			Parts       []string `json:"parts"`
+//		} `json:"content"`
+//		Metadata struct {
+//		} `json:"metadata"`
+//	}
 type ChatReqTemplate struct {
-	Id     string `json:"id"`
-	Author struct {
-		Role string `json:"role"`
-	} `json:"author"`
-	Content struct {
-		ContentType string   `json:"content_type"`
-		Parts       []string `json:"parts"`
-	} `json:"content"`
-	Metadata struct {
-	} `json:"metadata"`
-}
-type ChatFileReqTemplate struct {
 	Id     string `json:"id"`
 	Author struct {
 		Role string `json:"role"`
@@ -62,6 +36,22 @@ type ChatFileReqTemplate struct {
 		Attachments []interface{} `json:"attachments"`
 	} `json:"metadata"`
 }
+type ChatReqStr struct {
+	Action                     string            `json:"action"`
+	Messages                   []ChatReqTemplate `json:"messages"`
+	ParentMessageId            string            `json:"parent_message_id"`
+	Model                      string            `json:"model"`
+	TimezoneOffsetMin          int               `json:"timezone_offset_min"`
+	Suggestions                []interface{}     `json:"suggestions"`
+	HistoryAndTrainingDisabled bool              `json:"history_and_training_disabled"`
+	ArkoseToken                string            `json:"arkose_token"`
+	ConversationMode           struct {
+		Kind string `json:"kind"`
+	} `json:"conversation_mode"`
+	ForceParagen   bool `json:"force_paragen"`
+	ForceRateLimit bool `json:"force_rate_limit"`
+}
+
 type ChatRespStr struct {
 	Message struct {
 		Id     string `json:"id"`
@@ -231,11 +221,10 @@ type ApiImageGenerationErrorRespStr struct {
 	} `json:"error"`
 }
 
-func GetChatReqStr() *ChatReqStr {
+func GetChatReqStr(model string) *ChatReqStr {
 	jsonStr := `{
         "action": "next",
-        "messages": [
-        ],
+        "messages": [],
         "parent_message_id": "",
         "model": "gpt-4-code-interpreter",
         "timezone_offset_min": -480,
@@ -252,6 +241,7 @@ func GetChatReqStr() *ChatReqStr {
 	t := new(ChatReqStr)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.ParentMessageId = uuid.New().String()
+	t.Model = model
 	if err != nil {
 		log.Fatalf("Error parsing JSON: %v", err)
 	}
@@ -259,15 +249,13 @@ func GetChatReqStr() *ChatReqStr {
 }
 func GetChatReqTemplate() *ChatReqTemplate {
 	jsonStr := `{
-    "id": "aaa25982-c951-4be5-9e33-02ec1ffad43f",
+    "id": "",
     "author": {
-        "role": "user"
+        "role": ""
     },
     "content": {
         "content_type": "text",
-        "parts": [
-            "如何使用呢"
-        ]
+        "parts": []
     },
     "metadata": {}
 	}`
@@ -279,11 +267,11 @@ func GetChatReqTemplate() *ChatReqTemplate {
 	}
 	return t
 }
-func GetChatFileReqTemplate() *ChatFileReqTemplate {
+func GetChatFileReqTemplate() *ChatReqTemplate {
 	jsonStr := `{
-    "id": "aaa2d6bc-ef84-4f43-984f-c2996f1051bd",
+    "id": "",
     "author": {
-        "role": "user"
+        "role": ""
     },
     "content": {
         "content_type": "multimodal_text",
@@ -295,7 +283,7 @@ func GetChatFileReqTemplate() *ChatFileReqTemplate {
         ]
     }
 }`
-	t := new(ChatFileReqTemplate)
+	t := new(ChatReqTemplate)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.Id = uuid.New().String()
 	if err != nil {
@@ -308,7 +296,7 @@ func GetChatRespStr() *ChatRespStr {
 	jsonStr := `{
     "message":
         {
-            "id": "7e30dbfe-e648-48f2-80ac-166363233f22",
+            "id": "",
             "author":
                 {
                     "role": "assistant",
@@ -332,8 +320,8 @@ func GetChatRespStr() *ChatRespStr {
                     },
                 "is_complete": true,
                 "message_type": "next",
-                "model_slug": "gpt-4",
-                "parent_id": "aaa27d58-b93c-4bc0-9fd4-0632b6b0b7b7",
+                "model_slug": "",
+                "parent_id": "",
 				"timestamp_": "absolute",
 				"message_type": null,
 				"is_user_system_message": true,
