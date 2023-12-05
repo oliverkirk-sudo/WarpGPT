@@ -190,10 +190,11 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 	return nil
 }
 func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
-	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
-	result := p.getStreamResp(jsonData)
+	rawData := strings.TrimSpace(raw)
+	jsonData := strings.SplitN(rawData, "data:", 2)[1]
+	result := p.getStreamResp(strings.TrimSpace(jsonData))
 	if strings.Contains(raw, "[DONE]") {
-		return raw
+		return raw + "\n\n"
 	} else if result.Pass {
 		return ""
 	} else if result.ApiRespStrStreamEnd.Id != "" {
@@ -214,20 +215,24 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 func (p *UnofficialApiProcess) streamResponse(response *http.Response) error {
 	logger.Log.Debug("UnofficialApiProcess streamResponse")
 	defer response.Body.Close()
-	var accumulatedData strings.Builder
+	accumulatedData := ""
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 512)
 	for {
 		n, err := response.Body.Read(buf)
 		if n > 0 {
-			accumulatedData.Write(buf[:n])
-			if strings.HasSuffix(accumulatedData.String(), "\n\n") || strings.Contains(accumulatedData.String(), "[DONE]") {
-				data := p.streamChatProcess(accumulatedData.String())
-				if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
-					return err
+			accumulatedData += string(buf[:n])
+			for strings.Contains(accumulatedData, "\n\n") {
+				messages := strings.SplitN(accumulatedData, "\n\n", 2)
+				completeMessage := messages[0]
+				accumulatedData = messages[1]
+				data := p.streamChatProcess(completeMessage)
+				if data != "" {
+					if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
+						return err
+					}
+					p.GetConversation().GinContext.Writer.Flush()
 				}
-				p.GetConversation().GinContext.Writer.Flush()
-				accumulatedData.Reset()
 			}
 		}
 		if err != nil {
@@ -248,7 +253,7 @@ func (p *UnofficialApiProcess) jsonResponse(response *http.Response) error {
 	logger.Log.Debug("UnofficialApiProcess jsonResponse")
 	defer response.Body.Close()
 	var accumulatedData strings.Builder
-	buf := make([]byte, 1024)
+	buf := make([]byte, 512)
 	for {
 		n, err := response.Body.Read(buf)
 		if n > 0 {
@@ -295,15 +300,20 @@ func (p *UnofficialApiProcess) jsonImageProcess(raw string) string {
 	return raw
 }
 func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
+	logger.Log.Debug("getStreamResp")
 	var chatRespStr common.ChatRespStr
 	var chatEndRespStr common.ChatEndRespStr
-	result := &Result{
-		ApiRespStrStream:    common.ApiRespStrStream{},
-		ApiRespStrStreamEnd: common.ApiRespStrStreamEnd{},
-		Pass:                false,
-	}
+	result := new(Result)
+	result.ApiRespStrStreamEnd = common.ApiRespStrStreamEnd{}
+	result.ApiRespStrStream = common.ApiRespStrStream{}
+	result.Pass = false
 	json.Unmarshal([]byte(stream), &chatRespStr)
 	if chatRespStr.Message.Id != "" {
+		if chatRespStr.Message.Metadata.ParentId == "" {
+			result.Pass = true
+			return result
+		}
+		logger.Log.Debug("chatRespStr")
 		resp := common.GetApiRespStrStream(id)
 		choice := common.GetStreamChoice()
 		resp.Model = model
@@ -314,18 +324,15 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 		result.ApiRespStrStream = *resp
 	}
 	json.Unmarshal([]byte(stream), &chatEndRespStr)
-	if chatEndRespStr.MessageId != "" {
+	fmt.Printf("%+v\n\n", chatEndRespStr)
+	if chatEndRespStr.IsCompletion {
+		logger.Log.Debug("chatEndRespStr")
 		resp := common.GetApiRespStrStreamEnd(id)
 		resp.Model = model
 		result.ApiRespStrStreamEnd = *resp
 	}
 	if result.ApiRespStrStream.Id == "" && result.ApiRespStrStreamEnd.Id == "" {
 		result.Pass = true
-		return result
-	}
-	if chatRespStr.Message.Metadata.ParentId == "" {
-		result.Pass = true
-		return result
 	}
 	return result
 }
@@ -342,6 +349,7 @@ func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 	}
 }
 func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
+	logger.Log.Debug("generateBody")
 	messageList, exists := requestBody["messages"]
 	if !exists {
 		return errors.New("no message body")

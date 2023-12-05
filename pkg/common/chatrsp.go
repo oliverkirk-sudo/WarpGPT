@@ -308,8 +308,6 @@ func GetChatRespStr() *ChatRespStr {
                     },
                 "is_complete": true,
                 "message_type": "next",
-                "model_slug": "",
-                "parent_id": "",
 				"timestamp_": "absolute",
 				"message_type": null,
 				"is_user_system_message": true,
@@ -333,13 +331,13 @@ func GetChatRespStr() *ChatRespStr {
 }
 func GetChatEndRespStr() *ChatEndRespStr {
 	jsonStr := `{
-    "conversation_id": "59dcb4e2-25e4-44e8-b231-ff0df525d101",
-    "message_id": "2f27b73f-faec-4ad8-a1d2-25cc30ba40b4",
+    "conversation_id": "",
+    "message_id": "",
     "is_completion": true,
     "moderation_response": {
         "flagged": false,
         "blocked": false,
-        "moderation_id": "modr-8H0ss3XXpdakuGslnbTgSTcUsUceM"
+        "moderation_id": ""
     }
 }`
 	t := new(ChatEndRespStr)
@@ -364,10 +362,10 @@ func GetChatUserSystemMsgReqStr() *ChatUserSystemMsgReqStr {
 }
 func GetApiRespStr(id string) *ApiRespStr {
 	jsonStr := `{
-    "id": "chatcmpl-8H3JOH8ErCUKSM0KVZ6tHE06T0XLi",
+    "id": "",
     "object": "chat.completion",
     "created": 1699074998,
-    "model": "gpt-3.5-turbo-0613",
+    "model": "",
 	"system_fingerprint": null,
     "choices": [
     ],
@@ -401,10 +399,10 @@ func IdGenerator() string {
 }
 func GetApiRespStrStream(id string) *ApiRespStrStream {
 	jsonStr := `{
-    "id": "chatcmpl-8S5Y42w6FmenWEVTFK4CrH9BUiRka",
+    "id": "",
     "object": "chat.completion.chunk",
     "created": 1701705204,
-    "model": "gpt-3.5-turbo-0613",
+    "model": "",
     "system_fingerprint": null,
     "choices": [
         {
@@ -428,10 +426,10 @@ func GetApiRespStrStream(id string) *ApiRespStrStream {
 }
 func GetApiRespStrStreamEnd(id string) *ApiRespStrStreamEnd {
 	jsonStr := `{
-    "id": "chatcmpl-8S5Y42w6FmenWEVTFK4CrH9BUiRka",
+    "id": "",
     "object": "chat.completion.chunk",
     "created": 1701705204,
-    "model": "gpt-3.5-turbo-0613",
+    "model": "",
     "system_fingerprint": null,
     "choices": [
         {
