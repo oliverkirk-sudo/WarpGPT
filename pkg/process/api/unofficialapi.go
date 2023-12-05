@@ -9,27 +9,31 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	http "github.com/bogdanfinn/fhttp"
 	"io"
 	shttp "net/http"
 	"strings"
+	"time"
+
+	http "github.com/bogdanfinn/fhttp"
 
 	"github.com/gin-gonic/gin"
 )
 
-var id string
-var model string
-var oldString = ""
-
 type UnofficialApiProcess struct {
 	process.Process
+	ID        string
+	Model     string
+	OldString string
 }
-
+type ImagePointer struct {
+	Pointer string
+	Prompt  string
+}
 type Result struct {
-	ApiRespStrStream    common.ApiRespStrStream
-	ApiRespStrStreamEnd common.ApiRespStrStreamEnd
-	Pass                bool
+	ApiRespStrStream          common.ApiRespStrStream
+	ApiRespStrStreamEnd       common.ApiRespStrStreamEnd
+	ApiImageGenerationRespStr common.ApiImageGenerationRespStr
+	Pass                      bool
 }
 
 func (p *UnofficialApiProcess) SetConversation(conversation requestbody.Conversation) {
@@ -47,22 +51,22 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
 		return
 	}
-	id = common.IdGenerator()
+	p.ID = common.IdGenerator()
 	_, exists := requestBody["model"]
 	if exists {
-		model, _ = requestBody["model"].(string)
+		p.Model, _ = requestBody["model"].(string)
 	} else {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Model not provided"})
 		return
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "chat/completions") {
-		if err := p.chatApiProcess(requestBody); err != nil {
+		if err = p.chatApiProcess(requestBody); err != nil {
 			println(err.Error())
 			return
 		}
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "images/generations") {
-		if err := p.imageApiProcess(requestBody); err != nil {
+		if err = p.imageApiProcess(requestBody); err != nil {
 			println(err.Error())
 			return
 		}
@@ -71,21 +75,72 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 
 func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{}) error {
 	logger.Log.Debug("UnofficialApiProcess imageApiProcess")
-
+	response, err := p.MakeRequest(requestBody)
+	if err != nil {
+		return err
+	}
+	err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
+		data := p.jsonImageProcess(a)
+		if data != nil {
+			p.GetConversation().GinContext.Header("Content-Type", "application/json")
+			p.GetConversation().GinContext.JSON(response.StatusCode, data)
+			return true
+		}
+		return false
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}) error {
 	logger.Log.Debug("UnofficialApiProcess chatApiProcess")
-
+	response, err := p.MakeRequest(requestBody)
+	if err != nil {
+		return err
+	}
 	value, exists := requestBody["stream"]
-	reqModel, err := p.checkModel(model)
+
+	if exists && value.(bool) {
+		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
+			data := p.streamChatProcess(a)
+			if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
+				logger.Log.Fatal(err)
+				return true
+			}
+			p.GetConversation().GinContext.Writer.Flush()
+			return false
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
+			data := p.jsonChatProcess(a)
+			if data != nil {
+				p.GetConversation().GinContext.Header("Content-Type", "application/json")
+				p.GetConversation().GinContext.JSON(response.StatusCode, data)
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (*http.Response, error) {
+	reqModel, err := p.checkModel(p.Model)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
 	}
 	req := common.GetChatReqStr(reqModel)
 	if err = p.generateBody(req, requestBody); err != nil {
-		return err
+		return nil, err
 	}
 	jsonData, _ := json.Marshal(req)
 	var requestData map[string]interface{}
@@ -96,7 +151,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 	request, err := p.createRequest(requestData) //创建请求
 	if err != nil {
 		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server error"})
-		return err
+		return nil, err
 	}
 	response, err := p.GetConversation().RequestClient.Do(request)        //发送请求
 	process.CopyResponseHeaders(response, p.GetConversation().GinContext) //设置响应头
@@ -105,27 +160,20 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		err = json.NewDecoder(response.Body).Decode(&responseBody)
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
-			return err
+			return nil, err
 		}
 		p.GetConversation().GinContext.JSON(response.StatusCode, responseBody)
-		return err
+		return nil, err
 	}
-	if exists && value.(bool) {
-		err = p.streamResponse(response)
-		if err != nil {
-			return err
-		}
-	} else {
-		err = p.jsonResponse(response)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return response, nil
 }
+
 func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
 	logger.Log.Debug("UnofficialApiProcess createRequest")
+	err := p.addArkoseTokenIfNeeded(&requestBody)
+	if err != nil {
+		return nil, err
+	}
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, err
@@ -134,11 +182,6 @@ func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{})
 	if p.Conversation.RequestBody == shttp.NoBody {
 		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
 	} else {
-		err = p.addArkoseTokenIfNeeded(&requestBody)
-		fmt.Printf("%+v\n", requestBody)
-		if err != nil {
-			return nil, err
-		}
 		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
 	}
 	if err != nil {
@@ -178,8 +221,11 @@ func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
 }
 func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {
 	logger.Log.Debug("UnofficialApiProcess addArkoseTokenIfNeeded")
-	models := (*requestBody)["model"].(string)
-	if strings.HasPrefix(models, "gpt-4") {
+	model, exists := (*requestBody)["model"]
+	if !exists {
+		return nil
+	}
+	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
 		token, err := tools.NewAuthenticator("", "", "").GetLoginArkoseToken()
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
@@ -212,7 +258,8 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 	}
 	return ""
 }
-func (p *UnofficialApiProcess) streamResponse(response *http.Response) error {
+
+func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *UnofficialApiProcess, a string) bool) error {
 	logger.Log.Debug("UnofficialApiProcess streamResponse")
 	defer response.Body.Close()
 	accumulatedData := ""
@@ -226,46 +273,9 @@ func (p *UnofficialApiProcess) streamResponse(response *http.Response) error {
 				messages := strings.SplitN(accumulatedData, "\n\n", 2)
 				completeMessage := messages[0]
 				accumulatedData = messages[1]
-				data := p.streamChatProcess(completeMessage)
-				if data != "" {
-					if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
-						return err
-					}
-					p.GetConversation().GinContext.Writer.Flush()
-				}
-			}
-		}
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		select {
-		case <-p.GetConversation().GinContext.Writer.CloseNotify():
-			return nil
-		default:
-		}
-	}
-	return nil
-}
-func (p *UnofficialApiProcess) jsonResponse(response *http.Response) error {
-	logger.Log.Debug("UnofficialApiProcess jsonResponse")
-	defer response.Body.Close()
-	var accumulatedData strings.Builder
-	buf := make([]byte, 512)
-	for {
-		n, err := response.Body.Read(buf)
-		if n > 0 {
-			accumulatedData.Write(buf[:n])
-			if strings.HasSuffix(accumulatedData.String(), "\n\n") || strings.Contains(accumulatedData.String(), "[DONE]") {
-				data := p.jsonChatProcess(accumulatedData.String())
-				if data != nil {
-					p.GetConversation().GinContext.Header("Content-Type", "application/json")
-					p.GetConversation().GinContext.JSON(response.StatusCode, data)
+				if mid(p, completeMessage) {
 					return nil
 				}
-				accumulatedData.Reset()
 			}
 		}
 		if err != nil {
@@ -282,23 +292,86 @@ func (p *UnofficialApiProcess) jsonResponse(response *http.Response) error {
 	}
 	return nil
 }
+
+func (p *UnofficialApiProcess) jsonImageProcess(raw string) *common.ApiImageGenerationRespStr {
+	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
+	result := p.getImageResp(jsonData)
+	if !result.Pass {
+		return &result.ApiImageGenerationRespStr
+	}
+	return nil
+}
+
 func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
 	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
 	p.getStreamResp(jsonData)
 	if strings.Contains(raw, "[DONE]") {
-		resp := common.GetApiRespStr(id)
+		resp := common.GetApiRespStr(p.ID)
 		choice := common.GetStrChoices()
-		choice.Message.Content = oldString
+		choice.Message.Content = p.OldString
 		resp.Choices = append(resp.Choices, *choice)
-		resp.Model = model
+		resp.Model = p.Model
 		return resp
 	}
 	return nil
 }
-func (p *UnofficialApiProcess) jsonImageProcess(raw string) string {
-	println(raw)
-	return raw
+
+func (p *UnofficialApiProcess) getImageResp(stream string) *Result {
+	logger.Log.Debug("getImageResp")
+	var dalleRespStr common.DALLERespStr
+	imagePointerList := []ImagePointer{}
+	result := new(Result)
+	result.ApiImageGenerationRespStr = common.ApiImageGenerationRespStr{}
+	result.Pass = false
+	json.Unmarshal([]byte(stream), &dalleRespStr)
+	if dalleRespStr.Message.Author.Name == "dalle.text2im" && dalleRespStr.Message.Content.Parts[0].Metadata.Dalle.GenId != "" {
+		for _, v := range dalleRespStr.Message.Content.Parts {
+			item := new(ImagePointer)
+			item.Pointer = strings.ReplaceAll(v.AssetPointer, "file-service://", "")
+			item.Prompt = v.Metadata.Dalle.Prompt
+			imagePointerList = append(imagePointerList, *item)
+		}
+		if err := p.getImageUrlByPointer(&imagePointerList, result); err != nil {
+			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get Image Url Failed"})
+			logger.Log.Fatal(err)
+			return result
+		}
+		return result
+	} else {
+		result.Pass = true
+		return result
+	}
+	return result
 }
+func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePointer, result *Result) error {
+	logger.Log.Debug("getImageUrlByPointer")
+	for _, v := range *imagePointerList {
+		imageDownloadUrl := new(common.ImageDownloadUrl)
+		getUrl := "https://" + common.Env.Host + "/backend-api/files/file-" + v.Pointer + "/download"
+		request, err := http.NewRequest("GET", getUrl, nil)
+		if err != nil {
+			return err
+		}
+		p.buildHeaders(request)
+		response, err := p.GetConversation().RequestClient.Do(request)
+		defer response.Body.Close()
+		if err != nil {
+			return err
+		}
+		if response.Body != shttp.NoBody {
+			json.NewDecoder(response.Body).Decode(&imageDownloadUrl)
+		}
+		if imageDownloadUrl.DownloadUrl != "" {
+			imageItem := new(common.ApiImageItem)
+			result.ApiImageGenerationRespStr.Created = time.Now().Unix()
+			imageItem.Url = imageDownloadUrl.DownloadUrl
+			imageItem.RevisedPrompt = v.Prompt
+			result.ApiImageGenerationRespStr.Data = append(result.ApiImageGenerationRespStr.Data, *imageItem)
+		}
+	}
+	return nil
+}
+
 func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 	logger.Log.Debug("getStreamResp")
 	var chatRespStr common.ChatRespStr
@@ -314,21 +387,20 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 			return result
 		}
 		logger.Log.Debug("chatRespStr")
-		resp := common.GetApiRespStrStream(id)
+		resp := common.GetApiRespStrStream(p.ID)
 		choice := common.GetStreamChoice()
-		resp.Model = model
-		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], oldString, "")
-		oldString = chatRespStr.Message.Content.Parts[0]
+		resp.Model = p.Model
+		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], p.OldString, "")
+		p.OldString = chatRespStr.Message.Content.Parts[0]
 		resp.Choices = resp.Choices[:0]
 		resp.Choices = append(resp.Choices, *choice)
 		result.ApiRespStrStream = *resp
 	}
 	json.Unmarshal([]byte(stream), &chatEndRespStr)
-	fmt.Printf("%+v\n\n", chatEndRespStr)
 	if chatEndRespStr.IsCompletion {
 		logger.Log.Debug("chatEndRespStr")
-		resp := common.GetApiRespStrStreamEnd(id)
-		resp.Model = model
+		resp := common.GetApiRespStrStreamEnd(p.ID)
+		resp.Model = p.Model
 		result.ApiRespStrStreamEnd = *resp
 	}
 	if result.ApiRespStrStream.Id == "" && result.ApiRespStrStreamEnd.Id == "" {
@@ -349,7 +421,7 @@ func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 	}
 }
 func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
-	logger.Log.Debug("generateBody")
+	logger.Log.Debug("UnofficialApiProcess generateBody")
 	messageList, exists := requestBody["messages"]
 	if !exists {
 		return errors.New("no message body")

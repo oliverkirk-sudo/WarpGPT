@@ -195,11 +195,12 @@ type ApiRespStrStreamEnd struct {
 	} `json:"choices"`
 }
 type ApiImageGenerationRespStr struct {
-	Created int64 `json:"created"`
-	Data    []struct {
-		RevisedPrompt string `json:"revised_prompt"`
-		Url           string `json:"url"`
-	} `json:"data"`
+	Created int64          `json:"created"`
+	Data    []ApiImageItem `json:"data"`
+}
+type ApiImageItem struct {
+	RevisedPrompt string `json:"revised_prompt"`
+	Url           string `json:"url"`
 }
 type ApiImageGenerationErrorRespStr struct {
 	Error struct {
@@ -208,6 +209,14 @@ type ApiImageGenerationErrorRespStr struct {
 		Param   interface{} `json:"param"`
 		Type    string      `json:"type"`
 	} `json:"error"`
+}
+type ImageDownloadUrl struct {
+	Status      string `json:"status"`
+	DownloadUrl string `json:"download_url"`
+	Metadata    struct {
+	} `json:"metadata"`
+	FileName     string `json:"file_name"`
+	CreationTime string `json:"creation_time"`
 }
 
 func GetChatReqStr(model string) *ChatReqStr {

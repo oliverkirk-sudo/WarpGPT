@@ -62,10 +62,12 @@ func (p *PublicApiProcess) createRequest(requestBody map[string]interface{}) (*h
 		return nil, err
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
+	var request *http.Request
 	if p.Conversation.RequestBody == shttp.NoBody {
-		bodyReader = nil
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
+	} else {
+		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bodyReader)
 	}
-	request, err := http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bodyReader)
 	if err != nil {
 		return nil, err
 	}

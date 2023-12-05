@@ -43,7 +43,7 @@ func (p *BackendProcess) ProcessMethod() {
 	response, err := p.GetConversation().RequestClient.Do(request) //发送请求
 	if err != nil {
 		var jsonData interface{}
-		err := json.NewDecoder(response.Body).Decode(&jsonData)
+		err = json.NewDecoder(response.Body).Decode(&jsonData)
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
 			return
@@ -69,22 +69,19 @@ func (p *BackendProcess) ProcessMethod() {
 }
 func (p *BackendProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
 	logger.Log.Debug("BackendProcess createRequest")
-	bodyBytes, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, err
-	}
 	var request *http.Request
 	if p.Conversation.RequestBody == shttp.NoBody {
-		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
+		request, _ = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
 	} else {
-		err = p.addArkoseTokenIfNeeded(&requestBody)
+		err := p.addArkoseTokenIfNeeded(&requestBody)
 		if err != nil {
 			return nil, err
 		}
+		bodyBytes, err := json.Marshal(requestBody)
 		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 	p.buildHeaders(request)
 	p.setCookies(request)
@@ -155,8 +152,11 @@ func (p *BackendProcess) streamResponse(response *http.Response) error {
 }
 func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {
 	logger.Log.Debug("BackendProcess addArkoseTokenIfNeeded")
-	model := (*requestBody)["model"].(string)
-	if strings.HasPrefix(model, "gpt-4") {
+	model, exists := (*requestBody)["model"]
+	if !exists {
+		return nil
+	}
+	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
 		token, err := tools.NewAuthenticator("", "", "").GetLoginArkoseToken()
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
