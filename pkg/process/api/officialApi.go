@@ -4,11 +4,11 @@ import (
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/requestbody"
+	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
-	"io"
 	shttp "net/http"
 	"strings"
 )
@@ -96,28 +96,14 @@ func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
 
 func (p *OfficialApiProcess) streamResponse(response *http.Response) error {
 	logger.Log.Infoln("officialApiProcess stream Request")
-	defer response.Body.Close()
-
-	buf := make([]byte, 1024)
-	for {
-		n, err := response.Body.Read(buf)
-		if n > 0 {
-			if _, err := p.GetConversation().GinContext.Writer.Write(buf[:n]); err != nil {
-				return err
-			}
-			p.GetConversation().GinContext.Writer.Flush()
-		}
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
+	client := tools.NewSSEClient(response.Body)
+	events := client.Read()
+	for event := range events {
+		if _, err := p.GetConversation().GinContext.Writer.Write([]byte("data: " + event.Data + "\n\n")); err != nil {
 			return err
 		}
-		select {
-		case <-p.GetConversation().GinContext.Writer.CloseNotify():
-			return nil
-		default:
-		}
+		p.GetConversation().GinContext.Writer.Flush()
 	}
+	defer client.Close()
 	return nil
 }

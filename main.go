@@ -7,10 +7,9 @@ import (
 	"WarpGPT/pkg/process/reverse"
 	"WarpGPT/pkg/process/session"
 	"WarpGPT/pkg/requestbody"
-	"net/http"
-	"strconv"
-
+	"github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
+	"strconv"
 )
 
 func CORSMiddleware() gin.HandlerFunc {

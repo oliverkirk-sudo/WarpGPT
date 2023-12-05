@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
-	"io"
 	shttp "net/http"
 	"strings"
 )
@@ -120,34 +119,15 @@ func (p *BackendProcess) jsonResponse(response *http.Response) error {
 
 func (p *BackendProcess) streamResponse(response *http.Response) error {
 	logger.Log.Debug("BackendProcess streamResponse")
-	defer response.Body.Close()
-	var accumulatedData strings.Builder
-
-	buf := make([]byte, 1024)
-	for {
-		n, err := response.Body.Read(buf)
-		if n > 0 {
-			accumulatedData.Write(buf[:n])
-			if strings.HasSuffix(accumulatedData.String(), "\n\n") || strings.Contains(accumulatedData.String(), "[DONE]") {
-				if _, err := p.GetConversation().GinContext.Writer.Write([]byte(accumulatedData.String())); err != nil {
-					return err
-				}
-				p.GetConversation().GinContext.Writer.Flush()
-				accumulatedData.Reset()
-			}
-		}
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
+	client := tools.NewSSEClient(response.Body)
+	events := client.Read()
+	for event := range events {
+		if _, err := p.GetConversation().GinContext.Writer.Write([]byte("data: " + event.Data + "\n\n")); err != nil {
 			return err
 		}
-		select {
-		case <-p.GetConversation().GinContext.Writer.CloseNotify():
-			return nil
-		default:
-		}
+		p.GetConversation().GinContext.Writer.Flush()
 	}
+	defer client.Close()
 	return nil
 }
 func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {

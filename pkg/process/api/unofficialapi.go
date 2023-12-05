@@ -9,8 +9,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	shttp "net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,9 +22,11 @@ import (
 
 type UnofficialApiProcess struct {
 	process.Process
-	ID        string
-	Model     string
-	OldString string
+	ID               string
+	Model            string
+	OldString        string
+	Mode             string
+	ImagePointerList []ImagePointer
 }
 type ImagePointer struct {
 	Pointer string
@@ -60,12 +63,14 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 		return
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "chat/completions") {
+		p.Mode = "chat"
 		if err = p.chatApiProcess(requestBody); err != nil {
 			println(err.Error())
 			return
 		}
 	}
 	if strings.HasSuffix(p.GetConversation().RequestParam, "images/generations") {
+		p.Mode = "image"
 		if err = p.imageApiProcess(requestBody); err != nil {
 			println(err.Error())
 			return
@@ -79,15 +84,20 @@ func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{
 	if err != nil {
 		return err
 	}
+	result := new(Result)
+	result.ApiImageGenerationRespStr = common.ApiImageGenerationRespStr{}
 	err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
-		data := p.jsonImageProcess(a)
-		if data != nil {
-			p.GetConversation().GinContext.Header("Content-Type", "application/json")
-			p.GetConversation().GinContext.JSON(response.StatusCode, data)
-			return true
-		}
+		p.jsonImageProcess(a)
 		return false
 	})
+	if err = p.getImageUrlByPointer(&p.ImagePointerList, result); err != nil {
+		p.GetConversation().GinContext.JSON(500, gin.H{"error": "get image url failed"})
+		logger.Log.Fatal(err)
+	}
+	if result.ApiImageGenerationRespStr.Created != 0 {
+		p.GetConversation().GinContext.Header("Content-Type", "application/json")
+		p.GetConversation().GinContext.JSON(response.StatusCode, result.ApiImageGenerationRespStr)
+	}
 	if err != nil {
 		return err
 	}
@@ -137,6 +147,7 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 	reqModel, err := p.checkModel(p.Model)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+		return nil, err
 	}
 	req := common.GetChatReqStr(reqModel)
 	if err = p.generateBody(req, requestBody); err != nil {
@@ -147,6 +158,7 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 	err = json.Unmarshal(jsonData, &requestData)
 	if err != nil {
 		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+		return nil, err
 	}
 	request, err := p.createRequest(requestData) //创建请求
 	if err != nil {
@@ -236,11 +248,9 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 	return nil
 }
 func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
-	rawData := strings.TrimSpace(raw)
-	jsonData := strings.SplitN(rawData, "data:", 2)[1]
-	result := p.getStreamResp(strings.TrimSpace(jsonData))
+	result := p.getStreamResp(raw)
 	if strings.Contains(raw, "[DONE]") {
-		return raw + "\n\n"
+		return "data: " + raw + "\n\n"
 	} else if result.Pass {
 		return ""
 	} else if result.ApiRespStrStreamEnd.Id != "" {
@@ -261,50 +271,21 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 
 func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *UnofficialApiProcess, a string) bool) error {
 	logger.Log.Debug("UnofficialApiProcess streamResponse")
-	defer response.Body.Close()
-	accumulatedData := ""
-
-	buf := make([]byte, 512)
-	for {
-		n, err := response.Body.Read(buf)
-		if n > 0 {
-			accumulatedData += string(buf[:n])
-			for strings.Contains(accumulatedData, "\n\n") {
-				messages := strings.SplitN(accumulatedData, "\n\n", 2)
-				completeMessage := messages[0]
-				accumulatedData = messages[1]
-				if mid(p, completeMessage) {
-					return nil
-				}
+	client := tools.NewSSEClient(response.Body)
+	events := client.Read()
+	for event := range events {
+		if event.Event == "message" {
+			if mid(p, event.Data) {
+				return nil
 			}
 		}
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		select {
-		case <-p.GetConversation().GinContext.Writer.CloseNotify():
-			return nil
-		default:
-		}
 	}
-	return nil
-}
-
-func (p *UnofficialApiProcess) jsonImageProcess(raw string) *common.ApiImageGenerationRespStr {
-	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
-	result := p.getImageResp(jsonData)
-	if !result.Pass {
-		return &result.ApiImageGenerationRespStr
-	}
+	defer client.Close()
 	return nil
 }
 
 func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
-	jsonData := strings.Trim(strings.SplitN(raw, "data: ", 2)[1], "\n")
-	p.getStreamResp(jsonData)
+	p.getStreamResp(raw)
 	if strings.Contains(raw, "[DONE]") {
 		resp := common.GetApiRespStr(p.ID)
 		choice := common.GetStrChoices()
@@ -316,58 +297,50 @@ func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
 	return nil
 }
 
-func (p *UnofficialApiProcess) getImageResp(stream string) *Result {
+func (p *UnofficialApiProcess) jsonImageProcess(stream string) {
 	logger.Log.Debug("getImageResp")
 	var dalleRespStr common.DALLERespStr
-	imagePointerList := []ImagePointer{}
-	result := new(Result)
-	result.ApiImageGenerationRespStr = common.ApiImageGenerationRespStr{}
-	result.Pass = false
 	json.Unmarshal([]byte(stream), &dalleRespStr)
-	if dalleRespStr.Message.Author.Name == "dalle.text2im" && dalleRespStr.Message.Content.Parts[0].Metadata.Dalle.GenId != "" {
+	if dalleRespStr.Message.Author.Name == "dalle.text2im" && dalleRespStr.Message.Content.ContentType == "multimodal_text" {
+		logger.Log.Debug("found image")
 		for _, v := range dalleRespStr.Message.Content.Parts {
 			item := new(ImagePointer)
 			item.Pointer = strings.ReplaceAll(v.AssetPointer, "file-service://", "")
 			item.Prompt = v.Metadata.Dalle.Prompt
-			imagePointerList = append(imagePointerList, *item)
+			p.ImagePointerList = append(p.ImagePointerList, *item)
 		}
-		if err := p.getImageUrlByPointer(&imagePointerList, result); err != nil {
-			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get Image Url Failed"})
-			logger.Log.Fatal(err)
-			return result
-		}
-		return result
-	} else {
-		result.Pass = true
-		return result
 	}
-	return result
 }
 func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePointer, result *Result) error {
 	logger.Log.Debug("getImageUrlByPointer")
 	for _, v := range *imagePointerList {
 		imageDownloadUrl := new(common.ImageDownloadUrl)
-		getUrl := "https://" + common.Env.Host + "/backend-api/files/file-" + v.Pointer + "/download"
+		getUrl := "http://" + common.Env.Host + ":" + strconv.Itoa(common.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
+		logger.Log.Debug("image url is " + getUrl)
 		request, err := http.NewRequest("GET", getUrl, nil)
 		if err != nil {
 			return err
 		}
-		p.buildHeaders(request)
+		request.Header.Set("Authorization", p.GetConversation().RequestHeaders.Get("Authorization"))
 		response, err := p.GetConversation().RequestClient.Do(request)
-		defer response.Body.Close()
 		if err != nil {
 			return err
 		}
 		if response.Body != shttp.NoBody {
-			json.NewDecoder(response.Body).Decode(&imageDownloadUrl)
+			err = json.NewDecoder(response.Body).Decode(&imageDownloadUrl)
+			if err != nil {
+				return err
+			}
 		}
 		if imageDownloadUrl.DownloadUrl != "" {
+			logger.Log.Debug("getDownloadUrl")
 			imageItem := new(common.ApiImageItem)
 			result.ApiImageGenerationRespStr.Created = time.Now().Unix()
 			imageItem.Url = imageDownloadUrl.DownloadUrl
 			imageItem.RevisedPrompt = v.Prompt
 			result.ApiImageGenerationRespStr.Data = append(result.ApiImageGenerationRespStr.Data, *imageItem)
 		}
+		response.Body.Close()
 	}
 	return nil
 }
@@ -410,7 +383,7 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 }
 func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 	logger.Log.Debug("UnofficialApiProcess checkModel")
-	if strings.HasPrefix(model, "dalle") || strings.HasPrefix(model, "gpt-4-vision") {
+	if strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "gpt-4-vision") {
 		return "gpt-4", nil
 	} else if strings.HasPrefix(model, "gpt-3") {
 		return "text-davinci-002-render-sha", nil
@@ -422,33 +395,55 @@ func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 }
 func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
 	logger.Log.Debug("UnofficialApiProcess generateBody")
-	messageList, exists := requestBody["messages"]
-	if !exists {
-		return errors.New("no message body")
-	}
-	messages, _ := messageList.([]interface{})
+	if p.Mode == "chat" {
+		messageList, exists := requestBody["messages"]
+		if !exists {
+			return errors.New("no message body")
+		}
+		messages, _ := messageList.([]interface{})
 
-	for _, message := range messages {
-		messageItem, _ := message.(map[string]interface{})
-		role, _ := messageItem["role"].(string)
-		if _, ok := messageItem["content"].(string); ok {
-			content, _ := messageItem["content"].(string)
-			reqMessage := common.GetChatReqTemplate()
-			reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
-			reqMessage.Author.Role = role
-			reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
-			req.Messages = append(req.Messages, *reqMessage)
-		}
-		if _, ok := messageItem["content"].([]map[string]interface{}); ok {
-			reqFileMessage := common.GetChatFileReqTemplate()
-			content, _ := messageItem["content"].([]map[string]interface{})
-			reqFileMessage.Content.Parts = reqFileMessage.Content.Parts[:0]
-			reqFileMessage.Author.Role = role
-			p.fileReqProcess(&content, &reqFileMessage.Content.Parts)
-			//reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
-			//req.Messages = append(req.Messages, *reqFileMessage)
+		for _, message := range messages {
+			messageItem, _ := message.(map[string]interface{})
+			role, _ := messageItem["role"].(string)
+			if _, ok := messageItem["content"].(string); ok {
+				content, _ := messageItem["content"].(string)
+				reqMessage := common.GetChatReqTemplate()
+				reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
+				reqMessage.Author.Role = role
+				reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
+				req.Messages = append(req.Messages, *reqMessage)
+			}
+			if _, ok := messageItem["content"].([]map[string]interface{}); ok {
+				reqFileMessage := common.GetChatFileReqTemplate()
+				content, _ := messageItem["content"].([]map[string]interface{})
+				reqFileMessage.Content.Parts = reqFileMessage.Content.Parts[:0]
+				reqFileMessage.Author.Role = role
+				p.fileReqProcess(&content, &reqFileMessage.Content.Parts)
+				//reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
+				//req.Messages = append(req.Messages, *reqFileMessage)
+			}
 		}
 	}
+	if p.Mode == "image" {
+		prompt, exists := requestBody["prompt"]
+		if !exists {
+			return errors.New("please provide prompt")
+		}
+		count, exists := requestBody["n"]
+		if !exists {
+			count = 1
+		}
+		size, exists := requestBody["size"]
+		if !exists {
+			size = "1024x1024"
+		}
+		reqMessage := common.GetChatReqTemplate()
+		reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
+		reqMessage.Author.Role = "user"
+		reqMessage.Content.Parts = append(reqMessage.Content.Parts, fmt.Sprintf("Requirements for image generation:\n- ImageCount: %s\n- Size: %s\n- Prompt:  [%s]\n- Requirements: Using the DALLE tool, each image is generated according to the number of ImageCount. It is not allowed to contain multiple elements in one image. You must call the tool multiple times to generate the number of ImageCount images, and the details of each image are different\n", count, size, prompt))
+		req.Messages = append(req.Messages, *reqMessage)
+	}
+
 	return nil
 }
 func (p *UnofficialApiProcess) fileReqProcess(content *[]map[string]interface{}, part *[]interface{}) {
