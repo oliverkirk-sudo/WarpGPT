@@ -2,6 +2,7 @@ package api
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/requestbody"
@@ -238,12 +239,12 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 		return nil
 	}
 	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
-		token, err := tools.NewAuthenticator("", "", "").GetLoginArkoseToken()
+		token, err := funcaptcha.GetArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
-			return err.Error
+			return err
 		}
-		(*requestBody)["arkose_token"] = token.Token
+		(*requestBody)["arkose_token"] = token
 	}
 	return nil
 }

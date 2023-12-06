@@ -2,6 +2,7 @@ package tools
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
 	"bytes"
 	"encoding/json"
@@ -40,6 +41,7 @@ type Authenticator struct {
 	UserAgent          string
 	State              string
 	URL                string
+	PUID               string
 	Verifier_code      string
 	Verifier_challenge string
 	AuthResult         AuthResult
@@ -62,6 +64,7 @@ func NewAuthenticator(emailAddress, password string, puid string) *Authenticator
 		EmailAddress: emailAddress,
 		Password:     password,
 		Proxy:        os.Getenv("proxy"),
+		PUID:         puid,
 		UserAgent:    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
 	}
 	jar := tls_client.NewCookieJar()
@@ -293,12 +296,14 @@ func (auth *Authenticator) partFour(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	token, _ := auth.GetLoginArkoseToken()
+	token, err := funcaptcha.GetArkoseToken(funcaptcha.ArkVerAuth, auth.PUID)
+	if err != nil {
+		return NewError("part_four", 0, "get arkose_token failed", err)
+	}
 	cookie := &http.Cookie{
 		Name:  "arkoseToken",
-		Value: token.Token,
+		Value: token,
 		Path:  "/",
-		// 可以设置其他 cookie 属性，如 Domain, Expires 等
 	}
 	req.AddCookie(cookie)
 	resp, err := auth.Session.Do(req)
@@ -547,81 +552,82 @@ func (auth *Authenticator) GetAuthResult() AuthResult {
 	return auth.AuthResult
 }
 
-func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
-	logger.Log.Debug("getLoginArkoseToken")
-	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"
-	tokenData := url.Values{
-		"public_key":   {"0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"},
-		"site":         {"https://auth0.openai.com"},
-		"userbrowser":  {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"},
-		"capi_version": {"2.3.0"},
-		"capi_mode":    {"lightbox"},
-		"style_theme":  {"default"},
-		"rnd":          {"0.6246047691780858"},
-	}
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(tokenData.Encode()))
-	if err != nil {
-		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
-	}
-	req.Header.Add("User-Agent", auth.UserAgent)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
-	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
-	req.Header.Add("Connection", "keep-alive")
-	resp, err := auth.Session.Do(req)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, NewError("part_one", 0, "Failed to read requestbody", err)
-	}
-	var arkoseToken ArkoseToken
-	if resp.StatusCode == 200 {
-		err = json.Unmarshal(body, &arkoseToken)
-		return &arkoseToken, nil
-	} else {
-		return nil, NewError("get_login_arkose_token", resp.StatusCode, "Failed to make request", fmt.Errorf("error: Check details"))
-	}
-}
-func (auth *Authenticator) GetArkoseToken() (*ArkoseToken, *Error) {
-	logger.Log.Debug("GetArkoseToken")
-	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/35536E1E-65B4-4D96-9D97-6ADB7EFF8147"
-	tokenData := url.Values{
-		"public_key":   {"35536E1E-65B4-4D96-9D97-6ADB7EFF8147"},
-		"site":         {"https://" + common.Env.OpenAI_HOST + ""},
-		"userbrowser":  {common.Env.UserAgent},
-		"capi_version": {"2.3.0"},
-		"capi_mode":    {"inline"},
-		"style_theme":  {"default"},
-		"rnd":          {"0.41779648861402685"},
-	}
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(tokenData.Encode()))
-	if err != nil {
-		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
-	}
-	req.Header.Add("User-Agent", auth.UserAgent)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
-	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
-	req.Header.Add("Connection", "keep-alive")
-	resp, err := auth.Session.Do(req)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, NewError("part_one", 0, "Failed to read requestbody", err)
-	}
-	var arkoseToken ArkoseToken
-	if resp.StatusCode == 200 {
-		err = json.Unmarshal(body, &arkoseToken)
-		return &arkoseToken, nil
-	} else {
-		return nil, NewError("get_arkose_token", resp.StatusCode, "Failed to make request", fmt.Errorf("error: Check details"))
-	}
-}
+//func (auth *Authenticator) GetLoginArkoseToken() (*ArkoseToken, *Error) {
+//	logger.Log.Debug("getLoginArkoseToken")
+//	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"
+//	tokenData := url.Values{
+//		"public_key":   {"0A1D34FC-659D-4E23-B17B-694DCFCF6A6C"},
+//		"site":         {"https://auth0.openai.com"},
+//		"userbrowser":  {"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"},
+//		"capi_version": {"2.3.0"},
+//		"capi_mode":    {"lightbox"},
+//		"style_theme":  {"default"},
+//		"rnd":          {"0.6246047691780858"},
+//	}
+//	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(tokenData.Encode()))
+//	if err != nil {
+//		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
+//	}
+//	req.Header.Add("User-Agent", auth.UserAgent)
+//	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+//	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
+//	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+//	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
+//	req.Header.Add("Connection", "keep-alive")
+//	resp, err := auth.Session.Do(req)
+//	defer resp.Body.Close()
+//	if err != nil {
+//		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
+//	}
+//	body, err := io.ReadAll(resp.Body)
+//	if err != nil {
+//		return nil, NewError("part_one", 0, "Failed to read requestbody", err)
+//	}
+//	var arkoseToken ArkoseToken
+//	if resp.StatusCode == 200 {
+//		err = json.Unmarshal(body, &arkoseToken)
+//		return &arkoseToken, nil
+//	} else {
+//		return nil, NewError("get_login_arkose_token", resp.StatusCode, "Failed to make request", fmt.Errorf("error: Check details"))
+//	}
+//}
+
+//func (auth *Authenticator) GetArkoseToken() (*ArkoseToken, *Error) {
+//	logger.Log.Debug("GetArkoseToken")
+//	tokenUrl := "https://tcr9i." + common.Env.OpenAI_HOST + "/fc/gt2/public_key/35536E1E-65B4-4D96-9D97-6ADB7EFF8147"
+//	tokenData := url.Values{
+//		"public_key":   {"35536E1E-65B4-4D96-9D97-6ADB7EFF8147"},
+//		"site":         {"https://" + common.Env.OpenAI_HOST + ""},
+//		"userbrowser":  {common.Env.UserAgent},
+//		"capi_version": {"2.3.0"},
+//		"capi_mode":    {"inline"},
+//		"style_theme":  {"default"},
+//		"rnd":          {"0.41779648861402685"},
+//	}
+//	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(tokenData.Encode()))
+//	if err != nil {
+//		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
+//	}
+//	req.Header.Add("User-Agent", auth.UserAgent)
+//	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+//	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
+//	req.Header.Add("Referer", "https://"+common.Env.OpenAI_HOST+"/")
+//	req.Header.Add("Origin", "https://"+common.Env.OpenAI_HOST+"")
+//	req.Header.Add("Connection", "keep-alive")
+//	resp, err := auth.Session.Do(req)
+//	defer resp.Body.Close()
+//	if err != nil {
+//		return nil, NewError("get_arkose_token", 0, "Failed to make request", err)
+//	}
+//	body, err := io.ReadAll(resp.Body)
+//	if err != nil {
+//		return nil, NewError("part_one", 0, "Failed to read requestbody", err)
+//	}
+//	var arkoseToken ArkoseToken
+//	if resp.StatusCode == 200 {
+//		err = json.Unmarshal(body, &arkoseToken)
+//		return &arkoseToken, nil
+//	} else {
+//		return nil, NewError("get_arkose_token", resp.StatusCode, "Failed to make request", fmt.Errorf("error: Check details"))
+//	}
+//}
