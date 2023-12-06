@@ -80,8 +80,6 @@ func (p *OfficialApiProcess) createRequest(requestBody map[string]interface{}) (
 func (p *OfficialApiProcess) setHeaders(rsq *http.Request) {
 	rsq.Header.Set("Authorization", p.Conversation.RequestHeaders.Get("Authorization"))
 	rsq.Header.Set("Content-Type", p.Conversation.RequestHeaders.Get("Content-Type"))
-	rsq.Header.Set("Access-Control-Request-Method", p.Conversation.RequestHeaders.Get("Access-Control-Request-Method"))
-	rsq.Header.Set("Access-Control-Request-Headers", p.Conversation.RequestHeaders.Get("Access-Control-Request-Headers"))
 }
 
 func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
