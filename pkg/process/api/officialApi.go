@@ -46,13 +46,13 @@ func (p *OfficialApiProcess) ProcessMethod() {
 	process.CopyResponseHeaders(response, p.GetConversation().GinContext) //设置响应头
 
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
-		err := p.streamResponse(response)
+		err = p.streamResponse(response)
 		if err != nil {
 			return
 		}
 	}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
-		err := p.jsonResponse(response)
+		err = p.jsonResponse(response)
 		if err != nil {
 			logger.Log.Fatal(err)
 		}
@@ -73,11 +73,11 @@ func (p *OfficialApiProcess) createRequest(requestBody map[string]interface{}) (
 	if err != nil {
 		return nil, err
 	}
-	p.setHeaders(request)
+	p.WithHeaders(request)
 	return request, nil
 }
 
-func (p *OfficialApiProcess) setHeaders(rsq *http.Request) {
+func (p *OfficialApiProcess) WithHeaders(rsq *http.Request) {
 	rsq.Header.Set("Authorization", p.Conversation.RequestHeaders.Get("Authorization"))
 	rsq.Header.Set("Content-Type", p.Conversation.RequestHeaders.Get("Content-Type"))
 }

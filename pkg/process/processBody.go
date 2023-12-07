@@ -14,6 +14,7 @@ type Process struct {
 
 type ConversationProcessor interface {
 	SetConversation(conversation requestbody.Conversation)
+	GetConversation() requestbody.Conversation
 	ProcessMethod()
 }
 
@@ -22,11 +23,7 @@ func Do(p ConversationProcessor, conversation requestbody.Conversation) {
 	p.ProcessMethod()
 }
 
-type ProcessInterface interface {
-	GetConversation() requestbody.Conversation
-}
-
-func DecodeRequestBody(p ProcessInterface, requestBody *map[string]interface{}) error {
+func DecodeRequestBody(p ConversationProcessor, requestBody *map[string]interface{}) error {
 	conversation := p.GetConversation()
 	if conversation.RequestBody != http.NoBody {
 		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
