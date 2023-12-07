@@ -87,8 +87,8 @@ func (p *PublicApiProcess) setCookies(request *http.Request) {
 func (p *PublicApiProcess) buildHeaders(request *http.Request) {
 	logger.Log.Debug("PublicApiProcess buildHeaders")
 	headers := map[string]string{
-		"Host":          common.Env.OpenAI_HOST,
-		"Origin":        "https://" + common.Env.OpenAI_HOST + "/chat",
+		"Host":          common.Env.OpenaiHost,
+		"Origin":        "https://" + common.Env.OpenaiHost + "/chat",
 		"Authorization": p.GetConversation().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
 		"User-Agent":    common.Env.UserAgent,

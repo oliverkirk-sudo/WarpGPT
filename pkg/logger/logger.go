@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"WarpGPT/pkg/common"
 	"github.com/sirupsen/logrus"
 	"os"
 )
@@ -9,11 +10,14 @@ var Log *logrus.Logger
 
 func init() {
 	Log = logrus.New()
-	Log.SetLevel(logrus.DebugLevel)
-	// 设置日志输出为标准输出
+	level, err := logrus.ParseLevel(common.Env.LogLevel)
+	if err != nil {
+		return
+	}
+	Log.SetLevel(level)
+
 	Log.SetOutput(os.Stdout)
 
-	// 设置日志格式
 	Log.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05",
