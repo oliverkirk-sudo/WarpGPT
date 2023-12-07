@@ -21,7 +21,7 @@ func (p *ArkoseToken) SetConversation(conversation requestbody.Conversation) {
 
 func (p *ArkoseToken) ProcessMethod() {
 	logger.Log.Debug("ArkoseToken")
-	token, err := funcaptcha.GetArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
+	token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
 	if err != nil {
 		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Unable to generate ArkoseToken"})
 	}

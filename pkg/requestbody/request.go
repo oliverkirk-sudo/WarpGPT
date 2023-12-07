@@ -19,7 +19,7 @@ type Conversation struct {
 	RequestHeaders http.Header
 }
 
-func GetConversation(ctx *gin.Context) Conversation {
+func GetConversationPack(ctx *gin.Context) Conversation {
 	conversation := Conversation{}
 	conversation.GinContext = ctx
 	conversation.RequestUrl = common.CheckRequest(ctx).Generate(ctx.Param("path"), ctx.Request.URL.RawQuery)

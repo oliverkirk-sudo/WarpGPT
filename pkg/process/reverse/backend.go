@@ -138,7 +138,7 @@ func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interfac
 		return nil
 	}
 	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
-		token, err := funcaptcha.GetArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
+		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
 			return err

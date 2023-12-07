@@ -5,7 +5,7 @@ import (
 	"WarpGPT/pkg/logger"
 )
 
-func GetArkoseToken(arkType arkVer, puid string) (string, error) {
+func GetOpenAIArkoseToken(arkType arkVer, puid string) (string, error) {
 	logger.Log.Debug("GetArkoseToken")
 	proxyArg := WithProxy(common.Env.Proxy)
 	solver := NewSolver(proxyArg)
