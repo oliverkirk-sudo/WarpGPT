@@ -11,6 +11,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type proxyUrl struct {
 
 var ctx = context.Background()
 var redisClient *redis.Client
+var once sync.Once
 
 // 检查代理池中的代理数量,如果数量不足,则从代理池中获取代理
 func checkProxy() error {
@@ -67,23 +69,25 @@ func getProxyUrlList() (*proxyUrl, error) {
 	}
 }
 
-// 获取代理对象,返回redis.Client
 func connectRedis() *redis.Client {
-	logger.Log.Debug("获取redis连接")
-	if redisClient != nil {
-		logger.Log.Debug("发现连接redis,返回")
-		return redisClient
-	} else {
-		logger.Log.Debug("未发现连接redis,开始连接")
+
+	once.Do(func() {
 		redisClient = redis.NewClient(&redis.Options{
 			Addr:       common.Env.RedisAddress,
 			Password:   common.Env.RedisPasswd,
 			DB:         common.Env.RedisDB,
 			MaxRetries: 3,
 		})
-		logger.Log.Debug("连接redis完成")
-		return redisClient
-	}
+
+		_, err := redisClient.Ping(context.Background()).Result()
+		if err != nil {
+			logger.Log.Fatalf("无法连接到Redis: %v\n", err)
+		}
+
+		logger.Log.Println("成功连接到Redis")
+	})
+
+	return redisClient
 }
 
 // 从代理url中获取url,放入redis中
