@@ -71,21 +71,20 @@ func getProxyUrlList() (*proxyUrl, error) {
 
 func connectRedis() *redis.Client {
 
-	once.Do(func() {
-		redisClient = redis.NewClient(&redis.Options{
-			Addr:       common.Env.RedisAddress,
-			Password:   common.Env.RedisPasswd,
-			DB:         common.Env.RedisDB,
-			MaxRetries: 3,
-		})
-
-		_, err := redisClient.Ping(context.Background()).Result()
-		if err != nil {
-			logger.Log.Fatalf("无法连接到Redis: %v\n", err)
-		}
-
-		logger.Log.Println("成功连接到Redis")
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:           common.Env.RedisAddress,
+		Password:       common.Env.RedisPasswd,
+		DB:             common.Env.RedisDB,
+		MaxRetries:     3,
+		MaxActiveConns: 20,
 	})
+
+	_, err := redisClient.Ping(context.Background()).Result()
+	if err != nil {
+		logger.Log.Fatalf("无法连接到Redis: %v\n", err)
+	}
+
+	logger.Log.Println("成功连接到Redis")
 
 	return redisClient
 }
