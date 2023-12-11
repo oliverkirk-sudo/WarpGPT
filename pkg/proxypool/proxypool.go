@@ -127,7 +127,9 @@ func GetIpInRedis() (string, error) {
 	}
 	if strings.HasPrefix(result, "ip:") {
 		client.Del(ctx, result)
-		return strings.ReplaceAll(result, "ip:", ""), nil
+		ip := strings.ReplaceAll(result, "ip:", "")
+		logger.Log.Debug("获取的代理ip是: " + ip)
+		return ip, nil
 	} else {
 		logger.Log.Warning("非代理ip键,跳过")
 		ip, _ := GetIpInRedis()
