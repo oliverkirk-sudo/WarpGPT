@@ -6,6 +6,7 @@ import (
 	"WarpGPT/pkg/process/api"
 	"WarpGPT/pkg/process/reverse"
 	"WarpGPT/pkg/process/session"
+	"WarpGPT/pkg/proxypool"
 	"WarpGPT/pkg/requestbody"
 	"github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
@@ -79,5 +80,6 @@ func main() {
 		p := new(api.UnofficialApiProcess)
 		process.Do(p, conversation)
 	})
+	go proxypool.ProxyThread()
 	router.Run(common.Env.Host + ":" + strconv.Itoa(common.Env.Port))
 }

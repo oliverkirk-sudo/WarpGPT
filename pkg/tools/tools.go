@@ -2,6 +2,8 @@ package tools
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/proxypool"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 )
@@ -14,7 +16,16 @@ func GetHttpClient() tls_client.HttpClient {
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 		tls_client.WithRandomTLSExtensionOrder(),
-		tls_client.WithProxyUrl(common.Env.Proxy),
+	}
+	if common.Env.ProxyPoolUrl != "" {
+		ip, err := proxypool.GetIpInRedis()
+		if err != nil {
+			logger.Log.Fatal(err.Error())
+			return nil
+		}
+		options = append(options, tls_client.WithProxyUrl(ip))
+	} else {
+		options = append(options, tls_client.WithProxyUrl(common.Env.Proxy))
 	}
 	client, _ := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	return client

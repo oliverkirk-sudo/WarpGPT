@@ -128,16 +128,22 @@ output:
 - 在harPool目录中加入har文件，实现登录验证与gpt4对话验证
 - 将.env.temp修改为.env，修改配置项后保存
 ``` python
-proxy = "http://127.0.0.1:10809" #代理,不需要可删掉该行
+proxy = "http://127.0.0.1:10809"
 port = 5000
 host = '127.0.0.1'
-verify = False # 是否进行接口验证,在headers中加入AuthKey
-auth_key = "" # 接口验证码
-arkose_must = False # 是否请求一定带上arkose_token，防止有时gpt-3也需要arkose_token
-openai_host = "chat.openai.com" # openai域名
-logging_level = "debug" # 日志等级
-```
+verify = false
+auth_key = ""
+arkose_must = false
+OpenAI_HOST = "chat.openai.com"
+proxy_pool_url=""
+log_level = "debug"
 
+redis_address = "127.0.0.1:6379"
+redis_passwd = ""
+redis_db = 0
+```
+其中proxy_pool_url使用的是[ipidea](https://share.ipidea.net/8hPKah)的代理池，注册送100M流量，无限ip，一个月，测试足够
+使用代理池后需要填写redis信息，redis版本需要7以上
 ### 运行
 
 `go build && ./WarpGPT`
