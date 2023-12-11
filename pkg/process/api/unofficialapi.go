@@ -323,7 +323,7 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 			return err
 		}
 		request.Header.Set("Authorization", p.GetConversation().RequestHeaders.Get("Authorization"))
-		response, err := p.GetConversation().RequestClient.Do(request)
+		response, err := (&http.Client{}).Do(request)
 		if err != nil {
 			return err
 		}
