@@ -1,10 +1,10 @@
-package reverse
+package backendapi
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 )
 
 type BackendProcess struct {
-	process.Process
+	common.Process
 }
 
 func (p *BackendProcess) GetContext() common.Context {
@@ -28,7 +28,7 @@ func (p *BackendProcess) SetContext(conversation common.Context) {
 func (p *BackendProcess) ProcessMethod() {
 	logger.Log.Debug("ProcessBackendProcess")
 	var requestBody map[string]interface{}
-	err := process.DecodeRequestBody(p, &requestBody) //解析请求体
+	err := common.DecodeRequestBody(p, &requestBody) //解析请求体
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Incorrect json format"})
 		return
@@ -51,7 +51,7 @@ func (p *BackendProcess) ProcessMethod() {
 		return
 	}
 
-	process.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
+	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
 		err := p.streamResponse(response)
@@ -89,11 +89,11 @@ func (p *BackendProcess) createRequest(requestBody map[string]interface{}) (*htt
 func (p *BackendProcess) buildHeaders(request *http.Request) {
 	logger.Log.Debug("BackendProcess buildHeaders")
 	headers := map[string]string{
-		"Host":          common.Env.OpenaiHost,
-		"Origin":        "https://" + common.Env.OpenaiHost + "/chat",
+		"Host":          env.Env.OpenaiHost,
+		"Origin":        "https://" + env.Env.OpenaiHost + "/chat",
 		"Authorization": p.GetContext().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
-		"User-Agent":    common.Env.UserAgent,
+		"User-Agent":    env.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
 	}
 
@@ -136,7 +136,7 @@ func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interfac
 	if !exists {
 		return nil
 	}
-	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
+	if strings.HasPrefix(model.(string), "gpt-4") || env.Env.ArkoseMust {
 		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})

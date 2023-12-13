@@ -1,9 +1,8 @@
-package api
+package officialapi
 
 import (
 	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
@@ -14,7 +13,7 @@ import (
 )
 
 type OfficialApiProcess struct {
-	process.Process
+	common.Process
 }
 
 func (p *OfficialApiProcess) SetContext(conversation common.Context) {
@@ -25,7 +24,7 @@ func (p *OfficialApiProcess) GetContext() common.Context {
 }
 func (p *OfficialApiProcess) ProcessMethod() {
 	var requestBody map[string]interface{}
-	err := process.DecodeRequestBody(p, &requestBody) //解析请求体
+	err := common.DecodeRequestBody(p, &requestBody) //解析请求体
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Incorrect json format"})
 		return
@@ -43,7 +42,7 @@ func (p *OfficialApiProcess) ProcessMethod() {
 		return
 	}
 
-	process.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
+	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
 		err = p.streamResponse(response)

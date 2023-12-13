@@ -1,9 +1,9 @@
-package reverse
+package publicapi
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"bytes"
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
@@ -13,7 +13,7 @@ import (
 )
 
 type PublicApiProcess struct {
-	process.Process
+	common.Process
 }
 
 func (p *PublicApiProcess) SetContext(conversation common.Context) {
@@ -25,7 +25,7 @@ func (p *PublicApiProcess) GetContext() common.Context {
 func (p *PublicApiProcess) ProcessMethod() {
 	logger.Log.Debug("PublicApiProcess")
 	var requestBody map[string]interface{}
-	err := process.DecodeRequestBody(p, &requestBody) //解析请求体
+	err := common.DecodeRequestBody(p, &requestBody) //解析请求体
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Incorrect json format"})
 		return
@@ -52,7 +52,7 @@ func (p *PublicApiProcess) ProcessMethod() {
 			logger.Log.Fatal(err)
 		}
 	}
-	process.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
+	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 }
 func (p *PublicApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
 	logger.Log.Debug("PublicApiProcess createRequest")
@@ -86,11 +86,11 @@ func (p *PublicApiProcess) setCookies(request *http.Request) {
 func (p *PublicApiProcess) buildHeaders(request *http.Request) {
 	logger.Log.Debug("PublicApiProcess buildHeaders")
 	headers := map[string]string{
-		"Host":          common.Env.OpenaiHost,
-		"Origin":        "https://" + common.Env.OpenaiHost + "/chat",
+		"Host":          env.Env.OpenaiHost,
+		"Origin":        "https://" + env.Env.OpenaiHost + "/chat",
 		"Authorization": p.GetContext().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
-		"User-Agent":    common.Env.UserAgent,
+		"User-Agent":    env.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
 	}
 	for key, value := range headers {

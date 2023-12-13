@@ -1,17 +1,16 @@
 package proxypool
 
 import (
-	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/db"
+	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/logger"
 	"context"
 	"encoding/json"
 	"errors"
 	http "github.com/bogdanfinn/fhttp"
-	redis "github.com/redis/go-redis/v9"
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -26,13 +25,15 @@ type proxyUrl struct {
 }
 
 var ctx = context.Background()
-var redisClient *redis.Client
-var once sync.Once
+var redisdb = db.RedisDB{}
 
 // 检查代理池中的代理数量,如果数量不足,则从代理池中获取代理
 func checkProxy() error {
 	logger.Log.Debug("检查redis代理ip")
-	client := connectRedis()
+	client, err := redisdb.GetClient()
+	if err != nil {
+		return err
+	}
 	keys, err := client.Keys(ctx, "ip:*").Result()
 	if err != nil {
 		return err
@@ -48,7 +49,7 @@ func checkProxy() error {
 
 func getProxyUrlList() (*proxyUrl, error) {
 	logger.Log.Debug("请求代理ip池")
-	poolUrl := common.Env.ProxyPoolUrl
+	poolUrl := env.Env.ProxyPoolUrl
 	var proxy proxyUrl
 	get, err := http.Get(poolUrl)
 	if err != nil {
@@ -69,31 +70,14 @@ func getProxyUrlList() (*proxyUrl, error) {
 	}
 }
 
-func connectRedis() *redis.Client {
-
-	redisClient = redis.NewClient(&redis.Options{
-		Addr:           common.Env.RedisAddress,
-		Password:       common.Env.RedisPasswd,
-		DB:             common.Env.RedisDB,
-		MaxRetries:     3,
-		MaxActiveConns: 20,
-	})
-
-	_, err := redisClient.Ping(context.Background()).Result()
-	if err != nil {
-		logger.Log.Fatalf("无法连接到Redis: %v\n", err)
-	}
-
-	logger.Log.Println("成功连接到Redis")
-
-	return redisClient
-}
-
 // 从代理url中获取url,放入redis中
 func putIpsInRedis() error {
 	logger.Log.Debug("获取ip池并放入redis")
 	proxyList, err := getProxyUrlList()
-	client := connectRedis()
+	client, err := redisdb.GetClient()
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		logger.Log.Fatal(err)
 		return err
@@ -111,7 +95,10 @@ func putIpsInRedis() error {
 
 func GetIpInRedis() (string, error) {
 	logger.Log.Debug("请求代理ip")
-	client := connectRedis()
+	client, err := redisdb.GetClient()
+	if err != nil {
+		return "", err
+	}
 	statusCmd := client.RandomKey(ctx)
 	result, err := statusCmd.Result()
 	if err != nil {
@@ -141,7 +128,7 @@ func GetIpInRedis() (string, error) {
 }
 
 func ProxyThread() {
-	if common.Env.ProxyPoolUrl == "" {
+	if env.Env.ProxyPoolUrl == "" {
 		logger.Log.Debug("未启动redis")
 		return
 	}

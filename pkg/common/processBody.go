@@ -1,7 +1,6 @@
-package process
+package common
 
 import (
-	"WarpGPT/pkg/common"
 	"encoding/json"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
@@ -9,16 +8,16 @@ import (
 )
 
 type Process struct {
-	Context common.Context
+	Context Context
 }
 
 type ContextProcessor interface {
-	SetContext(conversation common.Context)
-	GetContext() common.Context
+	SetContext(conversation Context)
+	GetContext() Context
 	ProcessMethod()
 }
 
-func Do(p ContextProcessor, conversation common.Context) {
+func Do(p ContextProcessor, conversation Context) {
 	p.SetContext(conversation)
 	p.ProcessMethod()
 }

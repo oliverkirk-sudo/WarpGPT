@@ -3,13 +3,12 @@ package session
 import (
 	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/tools"
 	"github.com/gin-gonic/gin"
 )
 
 type SessionToken struct {
-	process.Process
+	common.Process
 }
 
 func (p *SessionToken) GetContext() common.Context {
@@ -22,7 +21,7 @@ func (p *SessionToken) SetContext(conversation common.Context) {
 func (p *SessionToken) ProcessMethod() {
 	logger.Log.Debug("SessionToken")
 	var requestBody map[string]interface{}
-	if err := process.DecodeRequestBody(p, &requestBody); err != nil {
+	if err := common.DecodeRequestBody(p, &requestBody); err != nil {
 		return
 	}
 	var auth *tools.Authenticator

@@ -1,13 +1,13 @@
 package funcaptcha
 
 import (
-	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/logger"
 )
 
 func GetOpenAIArkoseToken(arkType arkVer, puid string) (string, error) {
 	logger.Log.Debug("GetArkoseToken")
-	proxyArg := WithProxy(common.Env.Proxy)
+	proxyArg := WithProxy(env.Env.Proxy)
 	solver := NewSolver(proxyArg)
 	WithHarpool(solver)
 	token, err := solver.GetOpenAIToken(arkType, puid)

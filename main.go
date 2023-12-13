@@ -2,10 +2,13 @@ package main
 
 import (
 	"WarpGPT/pkg/common"
-	"WarpGPT/pkg/process"
-	"WarpGPT/pkg/process/api"
-	"WarpGPT/pkg/process/reverse"
-	"WarpGPT/pkg/process/session"
+	"WarpGPT/pkg/env"
+	"WarpGPT/pkg/plugins/arkosetoken"
+	"WarpGPT/pkg/plugins/backendapi"
+	"WarpGPT/pkg/plugins/officialapi"
+	"WarpGPT/pkg/plugins/publicapi"
+	session2 "WarpGPT/pkg/plugins/session"
+	"WarpGPT/pkg/plugins/unofficialapi"
 	"WarpGPT/pkg/proxypool"
 	"github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
@@ -30,7 +33,7 @@ func CORSMiddleware() gin.HandlerFunc {
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("AuthKey")
-		if apiKey != common.Env.AuthKey {
+		if apiKey != env.Env.AuthKey {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -39,46 +42,46 @@ func AuthMiddleware() gin.HandlerFunc {
 }
 func main() {
 	var router = gin.Default()
-	if common.Env.Verify {
+	if env.Env.Verify {
 		router.Use(AuthMiddleware())
 	}
 	router.Use(CORSMiddleware())
 	router.Any("/v1/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(api.OfficialApiProcess)
-		process.Do(p, conversation)
+		p := new(officialapi.OfficialApiProcess)
+		common.Do(p, conversation)
 
 	})
 	router.Any("/backend-api/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(reverse.BackendProcess)
-		process.Do(p, conversation)
+		p := new(backendapi.BackendProcess)
+		common.Do(p, conversation)
 	})
 	router.Any("/api/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(reverse.PublicApiProcess)
-		process.Do(p, conversation)
+		p := new(publicapi.PublicApiProcess)
+		common.Do(p, conversation)
 	})
 	router.Any("/public-api/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(reverse.PublicApiProcess)
-		process.Do(p, conversation)
+		p := new(publicapi.PublicApiProcess)
+		common.Do(p, conversation)
 	})
 	router.GET("/token", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(session.ArkoseToken)
-		process.Do(p, conversation)
+		p := new(arkosetoken.ArkoseToken)
+		common.Do(p, conversation)
 	})
 	router.POST("/getsession", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(session.SessionToken)
-		process.Do(p, conversation)
+		p := new(session2.SessionToken)
+		common.Do(p, conversation)
 	})
 	router.Any("/r/v1/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c)
-		p := new(api.UnofficialApiProcess)
-		process.Do(p, conversation)
+		p := new(unofficialapi.UnofficialApiProcess)
+		common.Do(p, conversation)
 	})
 	go proxypool.ProxyThread()
-	router.Run(common.Env.Host + ":" + strconv.Itoa(common.Env.Port))
+	router.Run(env.Env.Host + ":" + strconv.Itoa(env.Env.Port))
 }

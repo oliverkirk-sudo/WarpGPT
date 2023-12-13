@@ -1,10 +1,10 @@
-package api
+package unofficialapi
 
 import (
 	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
@@ -21,7 +21,7 @@ import (
 )
 
 type UnofficialApiProcess struct {
-	process.Process
+	common.Process
 	ID               string
 	Model            string
 	OldString        string
@@ -49,7 +49,7 @@ func (p *UnofficialApiProcess) GetContext() common.Context {
 func (p *UnofficialApiProcess) ProcessMethod() {
 	logger.Log.Debug("UnofficialApiProcess")
 	var requestBody map[string]interface{}
-	err := process.DecodeRequestBody(p, &requestBody)
+	err := common.DecodeRequestBody(p, &requestBody)
 	if err != nil {
 		p.GetContext().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
 		return
@@ -165,8 +165,8 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return nil, err
 	}
-	response, err := p.GetContext().RequestClient.Do(request)        //发送请求
-	process.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
+	response, err := p.GetContext().RequestClient.Do(request)       //发送请求
+	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 	if err != nil {
 		var responseBody interface{}
 		err = json.NewDecoder(response.Body).Decode(&responseBody)
@@ -215,11 +215,11 @@ func (p *UnofficialApiProcess) setCookies(request *http.Request) {
 func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
 	logger.Log.Debug("UnofficialApiProcess buildHeaders")
 	headers := map[string]string{
-		"Host":          common.Env.OpenaiHost,
-		"Origin":        "https://" + common.Env.OpenaiHost + "/chat",
+		"Host":          env.Env.OpenaiHost,
+		"Origin":        "https://" + env.Env.OpenaiHost + "/chat",
 		"Authorization": p.GetContext().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
-		"User-Agent":    common.Env.UserAgent,
+		"User-Agent":    env.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
 	}
 
@@ -237,7 +237,7 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 	if !exists {
 		return nil
 	}
-	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
+	if strings.HasPrefix(model.(string), "gpt-4") || env.Env.ArkoseMust {
 		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
@@ -315,7 +315,7 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 	logger.Log.Debug("getImageUrlByPointer")
 	for _, v := range *imagePointerList {
 		imageDownloadUrl := new(common.ImageDownloadUrl)
-		getUrl := "http://" + common.Env.Host + ":" + strconv.Itoa(common.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
+		getUrl := "http://" + env.Env.Host + ":" + strconv.Itoa(env.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
 		logger.Log.Debug("image url is " + getUrl)
 		request, err := http.NewRequest("GET", getUrl, nil)
 		if err != nil {
