@@ -1,9 +1,9 @@
 package session
 
 import (
+	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/process"
-	"WarpGPT/pkg/requestbody"
 	"WarpGPT/pkg/tools"
 	"github.com/gin-gonic/gin"
 )
@@ -12,11 +12,11 @@ type SessionToken struct {
 	process.Process
 }
 
-func (p *SessionToken) GetConversation() requestbody.Conversation {
-	return p.Conversation
+func (p *SessionToken) GetContext() common.Context {
+	return p.Context
 }
-func (p *SessionToken) SetConversation(conversation requestbody.Conversation) {
-	p.Conversation = conversation
+func (p *SessionToken) SetContext(conversation common.Context) {
+	p.Context = conversation
 }
 
 func (p *SessionToken) ProcessMethod() {
@@ -38,7 +38,7 @@ func (p *SessionToken) ProcessMethod() {
 				auth = tools.NewAuthenticator(username.(string), password.(string), "")
 			}
 			if err := auth.Begin(); err != nil {
-				p.GetConversation().GinContext.JSON(400, err)
+				p.GetContext().GinContext.JSON(400, err)
 			}
 			auth.GetModels()
 			all := auth.GetAuthResult()
@@ -49,16 +49,16 @@ func (p *SessionToken) ProcessMethod() {
 			result = accessToken
 			result["refreshCookie"] = refreshToken
 			result["models"] = model["models"]
-			p.GetConversation().GinContext.JSON(200, result)
+			p.GetContext().GinContext.JSON(200, result)
 		} else {
-			p.GetConversation().GinContext.JSON(400, gin.H{"error": "Please provide a refreshCookie or username and password."})
+			p.GetContext().GinContext.JSON(400, gin.H{"error": "Please provide a refreshCookie or username and password."})
 			return
 		}
 	} else {
 		auth = tools.NewAuthenticator("", "", "")
 		err := auth.GetAccessTokenByRefreshToken(refreshCookie.(string))
 		if err != nil {
-			p.GetConversation().GinContext.JSON(400, err)
+			p.GetContext().GinContext.JSON(400, err)
 			return
 		}
 		auth.GetModels()
@@ -70,6 +70,6 @@ func (p *SessionToken) ProcessMethod() {
 		result = accessToken
 		result["refreshCookie"] = refreshToken
 		result["models"] = model["models"]
-		p.GetConversation().GinContext.JSON(200, result)
+		p.GetContext().GinContext.JSON(200, result)
 	}
 }

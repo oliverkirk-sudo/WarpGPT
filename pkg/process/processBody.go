@@ -1,7 +1,7 @@
 package process
 
 import (
-	"WarpGPT/pkg/requestbody"
+	"WarpGPT/pkg/common"
 	"encoding/json"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
@@ -9,22 +9,22 @@ import (
 )
 
 type Process struct {
-	Conversation requestbody.Conversation
+	Context common.Context
 }
 
-type ConversationProcessor interface {
-	SetConversation(conversation requestbody.Conversation)
-	GetConversation() requestbody.Conversation
+type ContextProcessor interface {
+	SetContext(conversation common.Context)
+	GetContext() common.Context
 	ProcessMethod()
 }
 
-func Do(p ConversationProcessor, conversation requestbody.Conversation) {
-	p.SetConversation(conversation)
+func Do(p ContextProcessor, conversation common.Context) {
+	p.SetContext(conversation)
 	p.ProcessMethod()
 }
 
-func DecodeRequestBody(p ConversationProcessor, requestBody *map[string]interface{}) error {
-	conversation := p.GetConversation()
+func DecodeRequestBody(p ContextProcessor, requestBody *map[string]interface{}) error {
+	conversation := p.GetContext()
 	if conversation.RequestBody != http.NoBody {
 		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
 			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})

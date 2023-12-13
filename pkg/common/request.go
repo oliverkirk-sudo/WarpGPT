@@ -1,7 +1,6 @@
-package requestbody
+package common
 
 import (
-	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/tools"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
@@ -9,7 +8,7 @@ import (
 	"io"
 )
 
-type Conversation struct {
+type Context struct {
 	GinContext     *gin.Context
 	RequestUrl     string
 	RequestClient  tls_client.HttpClient
@@ -19,10 +18,10 @@ type Conversation struct {
 	RequestHeaders http.Header
 }
 
-func GetConversationPack(ctx *gin.Context) Conversation {
-	conversation := Conversation{}
+func GetContextPack(ctx *gin.Context) Context {
+	conversation := Context{}
 	conversation.GinContext = ctx
-	conversation.RequestUrl = common.CheckRequest(ctx).Generate(ctx.Param("path"), ctx.Request.URL.RawQuery)
+	conversation.RequestUrl = CheckRequest(ctx).Generate(ctx.Param("path"), ctx.Request.URL.RawQuery)
 	conversation.RequestMethod = ctx.Request.Method
 	conversation.RequestBody = ctx.Request.Body
 	conversation.RequestParam = ctx.Param("path")

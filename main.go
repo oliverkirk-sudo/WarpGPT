@@ -7,7 +7,6 @@ import (
 	"WarpGPT/pkg/process/reverse"
 	"WarpGPT/pkg/process/session"
 	"WarpGPT/pkg/proxypool"
-	"WarpGPT/pkg/requestbody"
 	"github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
 	"strconv"
@@ -45,38 +44,38 @@ func main() {
 	}
 	router.Use(CORSMiddleware())
 	router.Any("/v1/*path", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(api.OfficialApiProcess)
 		process.Do(p, conversation)
 
 	})
 	router.Any("/backend-api/*path", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(reverse.BackendProcess)
 		process.Do(p, conversation)
 	})
 	router.Any("/api/*path", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(reverse.PublicApiProcess)
 		process.Do(p, conversation)
 	})
 	router.Any("/public-api/*path", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(reverse.PublicApiProcess)
 		process.Do(p, conversation)
 	})
 	router.GET("/token", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(session.ArkoseToken)
 		process.Do(p, conversation)
 	})
 	router.POST("/getsession", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(session.SessionToken)
 		process.Do(p, conversation)
 	})
 	router.Any("/r/v1/*path", func(c *gin.Context) {
-		conversation := requestbody.GetConversationPack(c)
+		conversation := common.GetContextPack(c)
 		p := new(api.UnofficialApiProcess)
 		process.Do(p, conversation)
 	})

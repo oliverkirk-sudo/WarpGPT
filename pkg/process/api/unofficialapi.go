@@ -5,7 +5,6 @@ import (
 	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/process"
-	"WarpGPT/pkg/requestbody"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
@@ -40,11 +39,11 @@ type Result struct {
 	Pass                      bool
 }
 
-func (p *UnofficialApiProcess) SetConversation(conversation requestbody.Conversation) {
-	p.Conversation = conversation
+func (p *UnofficialApiProcess) SetContext(conversation common.Context) {
+	p.Context = conversation
 }
-func (p *UnofficialApiProcess) GetConversation() requestbody.Conversation {
-	return p.Conversation
+func (p *UnofficialApiProcess) GetContext() common.Context {
+	return p.Context
 }
 
 func (p *UnofficialApiProcess) ProcessMethod() {
@@ -52,7 +51,7 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 	var requestBody map[string]interface{}
 	err := process.DecodeRequestBody(p, &requestBody)
 	if err != nil {
-		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
+		p.GetContext().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
 		return
 	}
 	p.ID = common.IdGenerator()
@@ -60,17 +59,17 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 	if exists {
 		p.Model, _ = requestBody["model"].(string)
 	} else {
-		p.GetConversation().GinContext.JSON(400, gin.H{"error": "Model not provided"})
+		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
 		return
 	}
-	if strings.HasSuffix(p.GetConversation().RequestParam, "chat/completions") {
+	if strings.HasSuffix(p.GetContext().RequestParam, "chat/completions") {
 		p.Mode = "chat"
 		if err = p.chatApiProcess(requestBody); err != nil {
 			println(err.Error())
 			return
 		}
 	}
-	if strings.HasSuffix(p.GetConversation().RequestParam, "images/generations") {
+	if strings.HasSuffix(p.GetContext().RequestParam, "images/generations") {
 		p.Mode = "image"
 		if err = p.imageApiProcess(requestBody); err != nil {
 			println(err.Error())
@@ -92,12 +91,12 @@ func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{
 		return false
 	})
 	if err = p.getImageUrlByPointer(&p.ImagePointerList, result); err != nil {
-		p.GetConversation().GinContext.JSON(500, gin.H{"error": "get image url failed"})
+		p.GetContext().GinContext.JSON(500, gin.H{"error": "get image url failed"})
 		logger.Log.Fatal(err)
 	}
 	if result.ApiImageGenerationRespStr.Created != 0 {
-		p.GetConversation().GinContext.Header("Content-Type", "application/json")
-		p.GetConversation().GinContext.JSON(response.StatusCode, result.ApiImageGenerationRespStr)
+		p.GetContext().GinContext.Header("Content-Type", "application/json")
+		p.GetContext().GinContext.JSON(response.StatusCode, result.ApiImageGenerationRespStr)
 	}
 	if err != nil {
 		return err
@@ -116,11 +115,11 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 	if exists && value.(bool) {
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 			data := p.streamChatProcess(a)
-			if _, err = p.GetConversation().GinContext.Writer.Write([]byte(data)); err != nil {
+			if _, err = p.GetContext().GinContext.Writer.Write([]byte(data)); err != nil {
 				logger.Log.Fatal(err)
 				return true
 			}
-			p.GetConversation().GinContext.Writer.Flush()
+			p.GetContext().GinContext.Writer.Flush()
 			return false
 		})
 		if err != nil {
@@ -130,8 +129,8 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 			data := p.jsonChatProcess(a)
 			if data != nil {
-				p.GetConversation().GinContext.Header("Content-Type", "application/json")
-				p.GetConversation().GinContext.JSON(response.StatusCode, data)
+				p.GetContext().GinContext.Header("Content-Type", "application/json")
+				p.GetContext().GinContext.JSON(response.StatusCode, data)
 				return true
 			}
 			return false
@@ -147,7 +146,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (*http.Response, error) {
 	reqModel, err := p.checkModel(p.Model)
 	if err != nil {
-		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+		p.GetContext().GinContext.JSON(400, gin.H{"error": err.Error()})
 		return nil, err
 	}
 	req := common.GetChatReqStr(reqModel)
@@ -158,24 +157,24 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 	var requestData map[string]interface{}
 	err = json.Unmarshal(jsonData, &requestData)
 	if err != nil {
-		p.GetConversation().GinContext.JSON(400, gin.H{"error": err.Error()})
+		p.GetContext().GinContext.JSON(400, gin.H{"error": err.Error()})
 		return nil, err
 	}
 	request, err := p.createRequest(requestData) //创建请求
 	if err != nil {
-		p.GetConversation().GinContext.JSON(500, gin.H{"error": "Server error"})
+		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return nil, err
 	}
-	response, err := p.GetConversation().RequestClient.Do(request)        //发送请求
-	process.CopyResponseHeaders(response, p.GetConversation().GinContext) //设置响应头
+	response, err := p.GetContext().RequestClient.Do(request)        //发送请求
+	process.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 	if err != nil {
 		var responseBody interface{}
 		err = json.NewDecoder(response.Body).Decode(&responseBody)
 		if err != nil {
-			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
+			p.GetContext().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
 			return nil, err
 		}
-		p.GetConversation().GinContext.JSON(response.StatusCode, responseBody)
+		p.GetContext().GinContext.JSON(response.StatusCode, responseBody)
 		return nil, err
 	}
 	return response, nil
@@ -192,10 +191,10 @@ func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{})
 		return nil, err
 	}
 	var request *http.Request
-	if p.Conversation.RequestBody == shttp.NoBody {
-		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, nil)
+	if p.Context.RequestBody == shttp.NoBody {
+		request, err = http.NewRequest(p.Context.RequestMethod, p.Context.RequestUrl, nil)
 	} else {
-		request, err = http.NewRequest(p.Conversation.RequestMethod, p.Conversation.RequestUrl, bytes.NewBuffer(bodyBytes))
+		request, err = http.NewRequest(p.Context.RequestMethod, p.Context.RequestUrl, bytes.NewBuffer(bodyBytes))
 	}
 	if err != nil {
 		return nil, err
@@ -206,7 +205,7 @@ func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{})
 }
 func (p *UnofficialApiProcess) setCookies(request *http.Request) {
 	logger.Log.Debug("UnofficialApiProcess setCookies")
-	for _, cookie := range p.GetConversation().GinContext.Request.Cookies() {
+	for _, cookie := range p.GetContext().GinContext.Request.Cookies() {
 		request.AddCookie(&http.Cookie{
 			Name:  cookie.Name,
 			Value: cookie.Value,
@@ -218,17 +217,17 @@ func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
 	headers := map[string]string{
 		"Host":          common.Env.OpenaiHost,
 		"Origin":        "https://" + common.Env.OpenaiHost + "/chat",
-		"Authorization": p.GetConversation().GinContext.Request.Header.Get("Authorization"),
+		"Authorization": p.GetContext().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
 		"User-Agent":    common.Env.UserAgent,
-		"Content-Type":  p.GetConversation().GinContext.Request.Header.Get("Content-Type"),
+		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
 	}
 
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
 
-	if puid := p.GetConversation().GinContext.Request.Header.Get("PUID"); puid != "" {
+	if puid := p.GetContext().GinContext.Request.Header.Get("PUID"); puid != "" {
 		request.Header.Set("cookie", "_puid="+puid+";")
 	}
 }
@@ -239,9 +238,9 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 		return nil
 	}
 	if strings.HasPrefix(model.(string), "gpt-4") || common.Env.ArkoseMust {
-		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetConversation().RequestHeaders.Get("puid"))
+		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
-			p.GetConversation().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
+			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
 			return err
 		}
 		(*requestBody)["arkose_token"] = token
@@ -322,7 +321,7 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 		if err != nil {
 			return err
 		}
-		request.Header.Set("Authorization", p.GetConversation().RequestHeaders.Get("Authorization"))
+		request.Header.Set("Authorization", p.GetContext().RequestHeaders.Get("Authorization"))
 		response, err := (&http.Client{}).Do(request)
 		if err != nil {
 			return err
