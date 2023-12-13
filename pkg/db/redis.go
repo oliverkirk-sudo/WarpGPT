@@ -7,10 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type RedisDB struct {
-}
-
-func (r RedisDB) GetRedisClient() (*redis.Client, error) {
+func GetRedisClient() (*redis.Client, error) {
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:           env.Env.RedisAddress,

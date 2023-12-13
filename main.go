@@ -52,7 +52,7 @@ func main() {
 	router.Use(CORSMiddleware())
 	component := &plugins.Component{
 		Engine: router,
-		Db:     db.DB{GetRedisClient: db.RedisDB{}.GetRedisClient},
+		Db:     db.DB{GetRedisClient: db.GetRedisClient},
 		Logger: logger.Log,
 		Env:    &env.Env,
 		Auth:   funcaptcha.GetOpenAIArkoseToken,
