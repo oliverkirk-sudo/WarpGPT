@@ -1,15 +1,14 @@
-package session
+package arkosetoken
 
 import (
 	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/process"
 	"github.com/gin-gonic/gin"
 )
 
 type ArkoseToken struct {
-	process.Process
+	common.Process
 }
 
 func (p *ArkoseToken) GetContext() common.Context {
