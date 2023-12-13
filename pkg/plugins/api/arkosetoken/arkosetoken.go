@@ -11,6 +11,7 @@ import (
 )
 
 var context *plugins.Component
+var ArkoseTokenInstance ArkoseToken
 
 type Context struct {
 	GinContext     *gin.Context
@@ -48,11 +49,10 @@ type NotHaveUrl struct {
 func (u NotHaveUrl) Generate(path string, rawquery string) string {
 	return ""
 }
-func Run(com *plugins.Component) {
+func (p *ArkoseToken) Run(com *plugins.Component) {
 	context = com
-	context.Engine.Any("/token", func(c *gin.Context) {
+	context.Engine.GET("/token", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, NotHaveUrl{})
-		p := new(ArkoseToken)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(ArkoseToken), Context(conversation))
 	})
 }

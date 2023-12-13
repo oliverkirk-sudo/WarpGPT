@@ -14,6 +14,7 @@ import (
 )
 
 var context *plugins.Component
+var ApiProcessInstance ApiProcess
 
 type Context struct {
 	GinContext     *gin.Context
@@ -142,11 +143,10 @@ func (u ReverseApiRequestUrl) Generate(path string, rawquery string) string {
 	return "https://" + context.Env.OpenaiHost + "/api" + path + "?" + rawquery
 }
 
-func Run(com *plugins.Component) {
+func (p *ApiProcess) Run(com *plugins.Component) {
 	context = com
 	context.Engine.Any("/api/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, ReverseApiRequestUrl{})
-		p := new(ApiProcess)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(ApiProcess), Context(conversation))
 	})
 }

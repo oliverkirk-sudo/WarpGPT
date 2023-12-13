@@ -46,7 +46,7 @@ func GetHttpClient() tls_client.HttpClient {
 		tls_client.WithRandomTLSExtensionOrder(),
 	}
 	if env.Env.ProxyPoolUrl != "" {
-		ip, err := proxypool.GetIpInRedis()
+		ip, err := proxypool.ProxyPoolInstance.GetIpInRedis()
 		if err != nil {
 			logger.Log.Fatal(err.Error())
 			return nil

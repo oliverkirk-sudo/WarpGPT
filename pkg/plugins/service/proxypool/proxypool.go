@@ -25,9 +25,13 @@ type proxyUrl struct {
 
 var context *plugins.Component
 var redisdb db.DB
+var ProxyPoolInstance ProxyPool
+
+type ProxyPool struct {
+}
 
 // 检查代理池中的代理数量,如果数量不足,则从代理池中获取代理
-func checkProxy() error {
+func (p *ProxyPool) checkProxy() error {
 	context.Logger.Debug("检查redis代理ip")
 	client, err := redisdb.GetRedisClient()
 	if err != nil {
@@ -38,7 +42,7 @@ func checkProxy() error {
 		return err
 	}
 	if len(keys) < 20 {
-		err = putIpsInRedis()
+		err = p.putIpsInRedis()
 		if err != nil {
 			return err
 		}
@@ -46,7 +50,7 @@ func checkProxy() error {
 	return nil
 }
 
-func getProxyUrlList() (*proxyUrl, error) {
+func (p *ProxyPool) getProxyUrlList() (*proxyUrl, error) {
 	context.Logger.Debug("请求代理ip池")
 	poolUrl := context.Env.ProxyPoolUrl
 	var proxy proxyUrl
@@ -70,9 +74,9 @@ func getProxyUrlList() (*proxyUrl, error) {
 }
 
 // 从代理url中获取url,放入redis中
-func putIpsInRedis() error {
+func (p *ProxyPool) putIpsInRedis() error {
 	context.Logger.Debug("获取ip池并放入redis")
-	proxyList, err := getProxyUrlList()
+	proxyList, err := p.getProxyUrlList()
 	client, err := redisdb.GetRedisClient()
 	if err != nil {
 		return err
@@ -92,7 +96,7 @@ func putIpsInRedis() error {
 	return nil
 }
 
-func GetIpInRedis() (string, error) {
+func (p *ProxyPool) GetIpInRedis() (string, error) {
 	context.Logger.Debug("请求代理ip")
 	client, err := redisdb.GetRedisClient()
 	if err != nil {
@@ -109,7 +113,7 @@ func GetIpInRedis() (string, error) {
 	}
 	if size == 0 {
 		context.Logger.Fatal("数据库为空,无法获取代理ip,尝试获取")
-		err = putIpsInRedis()
+		err = p.putIpsInRedis()
 		if err != nil {
 			return "", err
 		}
@@ -121,18 +125,18 @@ func GetIpInRedis() (string, error) {
 		return ip, nil
 	} else {
 		context.Logger.Warning("非代理ip键,跳过")
-		ip, _ := GetIpInRedis()
+		ip, _ := p.GetIpInRedis()
 		return ip, nil
 	}
 }
 
-func ProxyThread() {
+func (p *ProxyPool) ProxyThread() {
 	if context.Env.ProxyPoolUrl == "" {
 		context.Logger.Debug("未启动redis")
 		return
 	}
 	context.Logger.Debug("启动redis监视线程")
-	if err := checkProxy(); err != nil {
+	if err := p.checkProxy(); err != nil {
 		return
 	}
 	ticker := time.NewTicker(1 * time.Minute)
@@ -140,7 +144,7 @@ func ProxyThread() {
 	for {
 		select {
 		case <-ticker.C:
-			err := checkProxy()
+			err := p.checkProxy()
 			if err != nil {
 				context.Logger.Fatal(err.Error())
 				return
@@ -149,8 +153,8 @@ func ProxyThread() {
 	}
 }
 
-func Run(com *plugins.Component) {
+func (p *ProxyPool) Run(com *plugins.Component) {
 	context = com
 	redisdb = context.Db
-	go ProxyThread()
+	go p.ProxyThread()
 }

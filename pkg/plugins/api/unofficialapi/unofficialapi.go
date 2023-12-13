@@ -22,6 +22,7 @@ import (
 )
 
 var context *plugins.Component
+var UnofficialApiProcessInstance UnofficialApiProcess
 
 type Context struct {
 	GinContext     *gin.Context
@@ -481,11 +482,10 @@ func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	}
 	return "https://" + context.Env.OpenaiHost + "/backend-api" + "/conversation" + "?" + rawquery
 }
-func Run(com *plugins.Component) {
+func (p *UnofficialApiProcess) Run(com *plugins.Component) {
 	context = com
 	context.Engine.Any("/r/v1/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, UnOfficialApiRequestUrl{})
-		p := new(UnofficialApiProcess)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(UnofficialApiProcess), Context(conversation))
 	})
 }

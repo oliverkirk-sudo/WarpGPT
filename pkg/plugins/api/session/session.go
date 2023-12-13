@@ -13,6 +13,7 @@ import (
 )
 
 var context *plugins.Component
+var SessionTokenInstance SessionToken
 
 type Context struct {
 	GinContext     *gin.Context
@@ -106,11 +107,10 @@ type NotHaveUrl struct {
 func (u NotHaveUrl) Generate(path string, rawquery string) string {
 	return ""
 }
-func Run(com *plugins.Component) {
+func (p *SessionToken) Run(com *plugins.Component) {
 	context = com
-	context.Engine.Any("/getsession", func(c *gin.Context) {
+	context.Engine.POST("/getsession", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, NotHaveUrl{})
-		p := new(SessionToken)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(SessionToken), Context(conversation))
 	})
 }

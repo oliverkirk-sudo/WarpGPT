@@ -52,19 +52,27 @@ func main() {
 	router.Use(CORSMiddleware())
 	component := &plugins.Component{
 		Engine: router,
-		Db:     db.DB{GetRedisClient: db.GetRedisClient},
+		Db: db.DB{
+			GetRedisClient: db.GetRedisClient,
+		},
 		Logger: logger.Log,
 		Env:    &env.Env,
 		Auth:   funcaptcha.GetOpenAIArkoseToken,
 	}
-	arkosetoken.Run(component)
-	session.Run(component)
-	backendapi.Run(component)
-	officialapi.Run(component)
-	unofficialapi.Run(component)
-	publicapi.Run(component)
-	rapi.Run(component)
-	proxypool.Run(component)
-
+	var plugins []plugins.Plugin
+	plugins = append(
+		plugins,
+		&arkosetoken.ArkoseTokenInstance,
+		&session.SessionTokenInstance,
+		&backendapi.BackendProcessInstance,
+		&officialapi.OfficialApiProcessInstance,
+		&unofficialapi.UnofficialApiProcessInstance,
+		&publicapi.PublicApiProcessInstance,
+		&rapi.ApiProcessInstance,
+		&proxypool.ProxyPoolInstance,
+	)
+	for _, plugin := range plugins {
+		plugin.Run(component)
+	}
 	router.Run(env.Env.Host + ":" + strconv.Itoa(env.Env.Port))
 }

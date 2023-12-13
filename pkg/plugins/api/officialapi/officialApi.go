@@ -16,6 +16,7 @@ import (
 )
 
 var context *plugins.Component
+var OfficialApiProcessInstance OfficialApiProcess
 
 type Context struct {
 	GinContext     *gin.Context
@@ -139,11 +140,10 @@ func (p *OfficialApiProcess) decodeRequestBody(requestBody *map[string]interface
 	return nil
 }
 
-func Run(com *plugins.Component) {
+func (p *OfficialApiProcess) Run(com *plugins.Component) {
 	context = com
 	context.Engine.Any("/v1/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, OfficialApiRequestUrl{})
-		p := new(OfficialApiProcess)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(OfficialApiProcess), Context(conversation))
 	})
 }

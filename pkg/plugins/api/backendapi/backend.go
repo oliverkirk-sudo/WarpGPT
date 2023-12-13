@@ -16,6 +16,7 @@ import (
 )
 
 var context *plugins.Component
+var BackendProcessInstance BackendProcess
 
 type Context struct {
 	GinContext     *gin.Context
@@ -188,11 +189,10 @@ func (u ReverseBackendRequestUrl) Generate(path string, rawquery string) string 
 	return "https://" + context.Env.OpenaiHost + "/backend-api" + path + "?" + rawquery
 }
 
-func Run(com *plugins.Component) {
+func (p *BackendProcess) Run(com *plugins.Component) {
 	context = com
 	context.Engine.Any("/backend-api/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, ReverseBackendRequestUrl{})
-		p := new(BackendProcess)
-		common.Do[Context](p, Context(conversation))
+		common.Do[Context](new(BackendProcess), Context(conversation))
 	})
 }
