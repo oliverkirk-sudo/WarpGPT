@@ -1,4 +1,4 @@
-package common
+package unofficialapi
 
 import (
 	"encoding/json"

@@ -296,7 +296,7 @@ func (auth *Authenticator) partFour(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerAuth, auth.PUID)
+	token, err := funcaptcha.GetOpenAIArkoseToken(0, auth.PUID)
 	if err != nil {
 		return NewError("part_four", 0, "get arkose_token failed", err)
 	}

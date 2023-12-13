@@ -3,7 +3,7 @@ package common
 import (
 	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/logger"
-	"WarpGPT/pkg/proxypool"
+	"WarpGPT/pkg/plugins/service/proxypool"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -20,11 +20,14 @@ type Context struct {
 	RequestMethod  string
 	RequestHeaders http.Header
 }
+type RequestUrl interface {
+	Generate(path string, rawquery string) string
+}
 
-func GetContextPack(ctx *gin.Context) Context {
+func GetContextPack[T RequestUrl](ctx *gin.Context, reqUrl T) Context {
 	conversation := Context{}
 	conversation.GinContext = ctx
-	conversation.RequestUrl = CheckRequest(ctx).Generate(ctx.Param("path"), ctx.Request.URL.RawQuery)
+	conversation.RequestUrl = reqUrl.Generate(ctx.Param("path"), ctx.Request.URL.RawQuery)
 	conversation.RequestMethod = ctx.Request.Method
 	conversation.RequestBody = ctx.Request.Body
 	conversation.RequestParam = ctx.Param("path")

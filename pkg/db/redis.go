@@ -10,7 +10,7 @@ import (
 type RedisDB struct {
 }
 
-func (r RedisDB) GetClient() (*redis.Client, error) {
+func (r RedisDB) GetRedisClient() (*redis.Client, error) {
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:           env.Env.RedisAddress,

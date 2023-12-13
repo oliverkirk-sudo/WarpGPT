@@ -1,36 +1,19 @@
 package common
 
 import (
-	"encoding/json"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
-type Process struct {
-	Context Context
-}
-
-type ContextProcessor interface {
-	SetContext(conversation Context)
-	GetContext() Context
+type ContextProcessor[T any] interface {
+	SetContext(conversation T)
+	GetContext() T
 	ProcessMethod()
 }
 
-func Do(p ContextProcessor, conversation Context) {
+func Do[T any](p ContextProcessor[T], conversation T) {
 	p.SetContext(conversation)
 	p.ProcessMethod()
-}
-
-func DecodeRequestBody(p ContextProcessor, requestBody *map[string]interface{}) error {
-	conversation := p.GetContext()
-	if conversation.RequestBody != http.NoBody {
-		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
-			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
-			return err
-		}
-	}
-	return nil
 }
 
 func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {

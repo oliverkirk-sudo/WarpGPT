@@ -2,14 +2,15 @@ package unofficialapi
 
 import (
 	"WarpGPT/pkg/common"
-	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/funcaptcha"
-	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/plugins"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	tls_client "github.com/bogdanfinn/tls-client"
+	"io"
 	shttp "net/http"
 	"strconv"
 	"strings"
@@ -20,8 +21,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var context *plugins.Component
+
+type Context struct {
+	GinContext     *gin.Context
+	RequestUrl     string
+	RequestClient  tls_client.HttpClient
+	RequestBody    io.ReadCloser
+	RequestParam   string
+	RequestMethod  string
+	RequestHeaders http.Header
+}
 type UnofficialApiProcess struct {
-	common.Process
+	Context          Context
 	ID               string
 	Model            string
 	OldString        string
@@ -33,28 +45,27 @@ type ImagePointer struct {
 	Prompt  string
 }
 type Result struct {
-	ApiRespStrStream          common.ApiRespStrStream
-	ApiRespStrStreamEnd       common.ApiRespStrStreamEnd
-	ApiImageGenerationRespStr common.ApiImageGenerationRespStr
+	ApiRespStrStream          ApiRespStrStream
+	ApiRespStrStreamEnd       ApiRespStrStreamEnd
+	ApiImageGenerationRespStr ApiImageGenerationRespStr
 	Pass                      bool
 }
 
-func (p *UnofficialApiProcess) SetContext(conversation common.Context) {
+func (p *UnofficialApiProcess) SetContext(conversation Context) {
 	p.Context = conversation
 }
-func (p *UnofficialApiProcess) GetContext() common.Context {
+func (p *UnofficialApiProcess) GetContext() Context {
 	return p.Context
 }
 
 func (p *UnofficialApiProcess) ProcessMethod() {
-	logger.Log.Debug("UnofficialApiProcess")
+	context.Logger.Debug("UnofficialApiProcess")
 	var requestBody map[string]interface{}
-	err := common.DecodeRequestBody(p, &requestBody)
+	err := p.decodeRequestBody(&requestBody)
 	if err != nil {
-		p.GetContext().GinContext.JSON(400, gin.H{"error": "Incorrect json format"})
 		return
 	}
-	p.ID = common.IdGenerator()
+	p.ID = IdGenerator()
 	_, exists := requestBody["model"]
 	if exists {
 		p.Model, _ = requestBody["model"].(string)
@@ -79,20 +90,20 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 }
 
 func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{}) error {
-	logger.Log.Debug("UnofficialApiProcess imageApiProcess")
+	context.Logger.Debug("UnofficialApiProcess imageApiProcess")
 	response, err := p.MakeRequest(requestBody)
 	if err != nil {
 		return err
 	}
 	result := new(Result)
-	result.ApiImageGenerationRespStr = common.ApiImageGenerationRespStr{}
+	result.ApiImageGenerationRespStr = ApiImageGenerationRespStr{}
 	err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 		p.jsonImageProcess(a)
 		return false
 	})
 	if err = p.getImageUrlByPointer(&p.ImagePointerList, result); err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "get image url failed"})
-		logger.Log.Fatal(err)
+		context.Logger.Fatal(err)
 	}
 	if result.ApiImageGenerationRespStr.Created != 0 {
 		p.GetContext().GinContext.Header("Content-Type", "application/json")
@@ -105,7 +116,7 @@ func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{
 }
 
 func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}) error {
-	logger.Log.Debug("UnofficialApiProcess chatApiProcess")
+	context.Logger.Debug("UnofficialApiProcess chatApiProcess")
 	response, err := p.MakeRequest(requestBody)
 	if err != nil {
 		return err
@@ -116,7 +127,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 			data := p.streamChatProcess(a)
 			if _, err = p.GetContext().GinContext.Writer.Write([]byte(data)); err != nil {
-				logger.Log.Fatal(err)
+				context.Logger.Fatal(err)
 				return true
 			}
 			p.GetContext().GinContext.Writer.Flush()
@@ -149,7 +160,7 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 		p.GetContext().GinContext.JSON(400, gin.H{"error": err.Error()})
 		return nil, err
 	}
-	req := common.GetChatReqStr(reqModel)
+	req := GetChatReqStr(reqModel)
 	if err = p.generateBody(req, requestBody); err != nil {
 		return nil, err
 	}
@@ -181,7 +192,7 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 }
 
 func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
-	logger.Log.Debug("UnofficialApiProcess createRequest")
+	context.Logger.Debug("UnofficialApiProcess createRequest")
 	err := p.addArkoseTokenIfNeeded(&requestBody)
 	if err != nil {
 		return nil, err
@@ -204,7 +215,7 @@ func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{})
 	return request, nil
 }
 func (p *UnofficialApiProcess) setCookies(request *http.Request) {
-	logger.Log.Debug("UnofficialApiProcess setCookies")
+	context.Logger.Debug("UnofficialApiProcess setCookies")
 	for _, cookie := range p.GetContext().GinContext.Request.Cookies() {
 		request.AddCookie(&http.Cookie{
 			Name:  cookie.Name,
@@ -213,13 +224,13 @@ func (p *UnofficialApiProcess) setCookies(request *http.Request) {
 	}
 }
 func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
-	logger.Log.Debug("UnofficialApiProcess buildHeaders")
+	context.Logger.Debug("UnofficialApiProcess buildHeaders")
 	headers := map[string]string{
-		"Host":          env.Env.OpenaiHost,
-		"Origin":        "https://" + env.Env.OpenaiHost + "/chat",
+		"Host":          context.Env.OpenaiHost,
+		"Origin":        "https://" + context.Env.OpenaiHost + "/chat",
 		"Authorization": p.GetContext().GinContext.Request.Header.Get("Authorization"),
 		"Connection":    "keep-alive",
-		"User-Agent":    env.Env.UserAgent,
+		"User-Agent":    context.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
 	}
 
@@ -232,13 +243,13 @@ func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
 	}
 }
 func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {
-	logger.Log.Debug("UnofficialApiProcess addArkoseTokenIfNeeded")
+	context.Logger.Debug("UnofficialApiProcess addArkoseTokenIfNeeded")
 	model, exists := (*requestBody)["model"]
 	if !exists {
 		return nil
 	}
-	if strings.HasPrefix(model.(string), "gpt-4") || env.Env.ArkoseMust {
-		token, err := funcaptcha.GetOpenAIArkoseToken(funcaptcha.ArkVerChat4, p.GetContext().RequestHeaders.Get("puid"))
+	if strings.HasPrefix(model.(string), "gpt-4") || context.Env.ArkoseMust {
+		token, err := funcaptcha.GetOpenAIArkoseToken(4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
 			return err
@@ -256,13 +267,13 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 	} else if result.ApiRespStrStreamEnd.Id != "" {
 		data, err := json.Marshal(result.ApiRespStrStreamEnd)
 		if err != nil {
-			logger.Log.Fatal(err)
+			context.Logger.Fatal(err)
 		}
 		return "data: " + string(data) + "\n\n"
 	} else if result.ApiRespStrStream.Id != "" {
 		data, err := json.Marshal(result.ApiRespStrStream)
 		if err != nil {
-			logger.Log.Fatal(err)
+			context.Logger.Fatal(err)
 		}
 		return "data: " + string(data) + "\n\n"
 	}
@@ -270,7 +281,7 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 }
 
 func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *UnofficialApiProcess, a string) bool) error {
-	logger.Log.Debug("UnofficialApiProcess streamResponse")
+	context.Logger.Debug("UnofficialApiProcess streamResponse")
 	client := tools.NewSSEClient(response.Body)
 	events := client.Read()
 	for event := range events {
@@ -284,11 +295,11 @@ func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *Uno
 	return nil
 }
 
-func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
+func (p *UnofficialApiProcess) jsonChatProcess(raw string) *ApiRespStr {
 	p.getStreamResp(raw)
 	if strings.Contains(raw, "[DONE]") {
-		resp := common.GetApiRespStr(p.ID)
-		choice := common.GetStrChoices()
+		resp := GetApiRespStr(p.ID)
+		choice := GetStrChoices()
 		choice.Message.Content = p.OldString
 		resp.Choices = append(resp.Choices, *choice)
 		resp.Model = p.Model
@@ -298,11 +309,11 @@ func (p *UnofficialApiProcess) jsonChatProcess(raw string) *common.ApiRespStr {
 }
 
 func (p *UnofficialApiProcess) jsonImageProcess(stream string) {
-	logger.Log.Debug("getImageResp")
-	var dalleRespStr common.DALLERespStr
+	context.Logger.Debug("getImageResp")
+	var dalleRespStr DALLERespStr
 	json.Unmarshal([]byte(stream), &dalleRespStr)
 	if dalleRespStr.Message.Author.Name == "dalle.text2im" && dalleRespStr.Message.Content.ContentType == "multimodal_text" {
-		logger.Log.Debug("found image")
+		context.Logger.Debug("found image")
 		for _, v := range dalleRespStr.Message.Content.Parts {
 			item := new(ImagePointer)
 			item.Pointer = strings.ReplaceAll(v.AssetPointer, "file-service://", "")
@@ -312,11 +323,11 @@ func (p *UnofficialApiProcess) jsonImageProcess(stream string) {
 	}
 }
 func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePointer, result *Result) error {
-	logger.Log.Debug("getImageUrlByPointer")
+	context.Logger.Debug("getImageUrlByPointer")
 	for _, v := range *imagePointerList {
-		imageDownloadUrl := new(common.ImageDownloadUrl)
-		getUrl := "http://" + env.Env.Host + ":" + strconv.Itoa(env.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
-		logger.Log.Debug("image url is " + getUrl)
+		imageDownloadUrl := new(ImageDownloadUrl)
+		getUrl := "http://" + context.Env.Host + ":" + strconv.Itoa(context.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
+		context.Logger.Debug("image url is " + getUrl)
 		request, err := http.NewRequest("GET", getUrl, nil)
 		if err != nil {
 			return err
@@ -333,8 +344,8 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 			}
 		}
 		if imageDownloadUrl.DownloadUrl != "" {
-			logger.Log.Debug("getDownloadUrl")
-			imageItem := new(common.ApiImageItem)
+			context.Logger.Debug("getDownloadUrl")
+			imageItem := new(ApiImageItem)
 			result.ApiImageGenerationRespStr.Created = time.Now().Unix()
 			imageItem.Url = imageDownloadUrl.DownloadUrl
 			imageItem.RevisedPrompt = v.Prompt
@@ -346,12 +357,12 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 }
 
 func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
-	logger.Log.Debug("getStreamResp")
-	var chatRespStr common.ChatRespStr
-	var chatEndRespStr common.ChatEndRespStr
+	context.Logger.Debug("getStreamResp")
+	var chatRespStr ChatRespStr
+	var chatEndRespStr ChatEndRespStr
 	result := new(Result)
-	result.ApiRespStrStreamEnd = common.ApiRespStrStreamEnd{}
-	result.ApiRespStrStream = common.ApiRespStrStream{}
+	result.ApiRespStrStreamEnd = ApiRespStrStreamEnd{}
+	result.ApiRespStrStream = ApiRespStrStream{}
 	result.Pass = false
 	json.Unmarshal([]byte(stream), &chatRespStr)
 	if chatRespStr.Message.Id != "" {
@@ -359,9 +370,9 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 			result.Pass = true
 			return result
 		}
-		logger.Log.Debug("chatRespStr")
-		resp := common.GetApiRespStrStream(p.ID)
-		choice := common.GetStreamChoice()
+		context.Logger.Debug("chatRespStr")
+		resp := GetApiRespStrStream(p.ID)
+		choice := GetStreamChoice()
 		resp.Model = p.Model
 		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], p.OldString, "")
 		p.OldString = chatRespStr.Message.Content.Parts[0]
@@ -371,8 +382,8 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 	}
 	json.Unmarshal([]byte(stream), &chatEndRespStr)
 	if chatEndRespStr.IsCompletion {
-		logger.Log.Debug("chatEndRespStr")
-		resp := common.GetApiRespStrStreamEnd(p.ID)
+		context.Logger.Debug("chatEndRespStr")
+		resp := GetApiRespStrStreamEnd(p.ID)
 		resp.Model = p.Model
 		result.ApiRespStrStreamEnd = *resp
 	}
@@ -382,7 +393,7 @@ func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
 	return result
 }
 func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
-	logger.Log.Debug("UnofficialApiProcess checkModel")
+	context.Logger.Debug("UnofficialApiProcess checkModel")
 	if strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "gpt-4-vision") {
 		return "gpt-4", nil
 	} else if strings.HasPrefix(model, "gpt-3") {
@@ -393,8 +404,8 @@ func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 		return "", errors.New("unsupported model")
 	}
 }
-func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody map[string]interface{}) error {
-	logger.Log.Debug("UnofficialApiProcess generateBody")
+func (p *UnofficialApiProcess) generateBody(req *ChatReqStr, requestBody map[string]interface{}) error {
+	context.Logger.Debug("UnofficialApiProcess generateBody")
 	if p.Mode == "chat" {
 		messageList, exists := requestBody["messages"]
 		if !exists {
@@ -407,14 +418,14 @@ func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody 
 			role, _ := messageItem["role"].(string)
 			if _, ok := messageItem["content"].(string); ok {
 				content, _ := messageItem["content"].(string)
-				reqMessage := common.GetChatReqTemplate()
+				reqMessage := GetChatReqTemplate()
 				reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
 				reqMessage.Author.Role = role
 				reqMessage.Content.Parts = append(reqMessage.Content.Parts, content)
 				req.Messages = append(req.Messages, *reqMessage)
 			}
 			if _, ok := messageItem["content"].([]map[string]interface{}); ok {
-				reqFileMessage := common.GetChatFileReqTemplate()
+				reqFileMessage := GetChatFileReqTemplate()
 				content, _ := messageItem["content"].([]map[string]interface{})
 				reqFileMessage.Content.Parts = reqFileMessage.Content.Parts[:0]
 				reqFileMessage.Author.Role = role
@@ -437,7 +448,7 @@ func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody 
 		if !exists {
 			size = "1024x1024"
 		}
-		reqMessage := common.GetChatReqTemplate()
+		reqMessage := GetChatReqTemplate()
 		reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
 		reqMessage.Author.Role = "user"
 		reqMessage.Content.Parts = append(reqMessage.Content.Parts, fmt.Sprintf("Requirements for image generation:\n- ImageCount: %s\n- Size: %s\n- Prompt:  [%s]\n- Requirements: Using the DALLE tool, each image is generated according to the number of ImageCount. It is not allowed to contain multiple elements in one image. You must call the tool multiple times to generate the number of ImageCount images, and the details of each image are different\n", count, size, prompt))
@@ -448,4 +459,33 @@ func (p *UnofficialApiProcess) generateBody(req *common.ChatReqStr, requestBody 
 }
 func (p *UnofficialApiProcess) fileReqProcess(content *[]map[string]interface{}, part *[]interface{}) {
 
+}
+
+func (p *UnofficialApiProcess) decodeRequestBody(requestBody *map[string]interface{}) error {
+	conversation := p.GetContext()
+	if conversation.RequestBody != shttp.NoBody {
+		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
+			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
+			return err
+		}
+	}
+	return nil
+}
+
+type UnOfficialApiRequestUrl struct {
+}
+
+func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
+	if rawquery == "" {
+		return "https://" + context.Env.OpenaiHost + "/backend-api" + "/conversation"
+	}
+	return "https://" + context.Env.OpenaiHost + "/backend-api" + "/conversation" + "?" + rawquery
+}
+func Run(com *plugins.Component) {
+	context = com
+	context.Engine.Any("/r/v1/*path", func(c *gin.Context) {
+		conversation := common.GetContextPack(c, UnOfficialApiRequestUrl{})
+		p := new(UnofficialApiProcess)
+		common.Do[Context](p, Context(conversation))
+	})
 }

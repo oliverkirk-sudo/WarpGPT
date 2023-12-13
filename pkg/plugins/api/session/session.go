@@ -2,26 +2,42 @@ package session
 
 import (
 	"WarpGPT/pkg/common"
-	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/plugins"
 	"WarpGPT/pkg/tools"
+	"encoding/json"
+	http "github.com/bogdanfinn/fhttp"
+	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/gin-gonic/gin"
+	"io"
+	shttp "net/http"
 )
 
+var context *plugins.Component
+
+type Context struct {
+	GinContext     *gin.Context
+	RequestUrl     string
+	RequestClient  tls_client.HttpClient
+	RequestBody    io.ReadCloser
+	RequestParam   string
+	RequestMethod  string
+	RequestHeaders http.Header
+}
 type SessionToken struct {
-	common.Process
+	Context Context
 }
 
-func (p *SessionToken) GetContext() common.Context {
+func (p *SessionToken) GetContext() Context {
 	return p.Context
 }
-func (p *SessionToken) SetContext(conversation common.Context) {
+func (p *SessionToken) SetContext(conversation Context) {
 	p.Context = conversation
 }
 
 func (p *SessionToken) ProcessMethod() {
-	logger.Log.Debug("SessionToken")
+	context.Logger.Debug("SessionToken")
 	var requestBody map[string]interface{}
-	if err := common.DecodeRequestBody(p, &requestBody); err != nil {
+	if err := p.decodeRequestBody(&requestBody); err != nil {
 		return
 	}
 	var auth *tools.Authenticator
@@ -38,6 +54,7 @@ func (p *SessionToken) ProcessMethod() {
 			}
 			if err := auth.Begin(); err != nil {
 				p.GetContext().GinContext.JSON(400, err)
+				return
 			}
 			auth.GetModels()
 			all := auth.GetAuthResult()
@@ -71,4 +88,29 @@ func (p *SessionToken) ProcessMethod() {
 		result["models"] = model["models"]
 		p.GetContext().GinContext.JSON(200, result)
 	}
+}
+func (p *SessionToken) decodeRequestBody(requestBody *map[string]interface{}) error {
+	conversation := p.GetContext()
+	if conversation.RequestBody != shttp.NoBody {
+		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
+			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
+			return err
+		}
+	}
+	return nil
+}
+
+type NotHaveUrl struct {
+}
+
+func (u NotHaveUrl) Generate(path string, rawquery string) string {
+	return ""
+}
+func Run(com *plugins.Component) {
+	context = com
+	context.Engine.Any("/getsession", func(c *gin.Context) {
+		conversation := common.GetContextPack(c, NotHaveUrl{})
+		p := new(SessionToken)
+		common.Do[Context](p, Context(conversation))
+	})
 }

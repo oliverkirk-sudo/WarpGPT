@@ -1,15 +1,19 @@
 package main
 
 import (
-	"WarpGPT/pkg/common"
+	"WarpGPT/pkg/db"
 	"WarpGPT/pkg/env"
-	"WarpGPT/pkg/plugins/arkosetoken"
-	"WarpGPT/pkg/plugins/backendapi"
-	"WarpGPT/pkg/plugins/officialapi"
-	"WarpGPT/pkg/plugins/publicapi"
-	session2 "WarpGPT/pkg/plugins/session"
-	"WarpGPT/pkg/plugins/unofficialapi"
-	"WarpGPT/pkg/proxypool"
+	"WarpGPT/pkg/funcaptcha"
+	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/plugins"
+	"WarpGPT/pkg/plugins/api/arkosetoken"
+	"WarpGPT/pkg/plugins/api/backendapi"
+	"WarpGPT/pkg/plugins/api/officialapi"
+	"WarpGPT/pkg/plugins/api/publicapi"
+	"WarpGPT/pkg/plugins/api/rapi"
+	"WarpGPT/pkg/plugins/api/session"
+	"WarpGPT/pkg/plugins/api/unofficialapi"
+	"WarpGPT/pkg/plugins/service/proxypool"
 	"github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
 	"strconv"
@@ -46,42 +50,21 @@ func main() {
 		router.Use(AuthMiddleware())
 	}
 	router.Use(CORSMiddleware())
-	router.Any("/v1/*path", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(officialapi.OfficialApiProcess)
-		common.Do(p, conversation)
+	component := &plugins.Component{
+		Engine: router,
+		Db:     db.DB{GetRedisClient: db.RedisDB{}.GetRedisClient},
+		Logger: logger.Log,
+		Env:    &env.Env,
+		Auth:   funcaptcha.GetOpenAIArkoseToken,
+	}
+	arkosetoken.Run(component)
+	session.Run(component)
+	backendapi.Run(component)
+	officialapi.Run(component)
+	unofficialapi.Run(component)
+	publicapi.Run(component)
+	rapi.Run(component)
+	proxypool.Run(component)
 
-	})
-	router.Any("/backend-api/*path", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(backendapi.BackendProcess)
-		common.Do(p, conversation)
-	})
-	router.Any("/api/*path", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(publicapi.PublicApiProcess)
-		common.Do(p, conversation)
-	})
-	router.Any("/public-api/*path", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(publicapi.PublicApiProcess)
-		common.Do(p, conversation)
-	})
-	router.GET("/token", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(arkosetoken.ArkoseToken)
-		common.Do(p, conversation)
-	})
-	router.POST("/getsession", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(session2.SessionToken)
-		common.Do(p, conversation)
-	})
-	router.Any("/r/v1/*path", func(c *gin.Context) {
-		conversation := common.GetContextPack(c)
-		p := new(unofficialapi.UnofficialApiProcess)
-		common.Do(p, conversation)
-	})
-	go proxypool.ProxyThread()
 	router.Run(env.Env.Host + ":" + strconv.Itoa(env.Env.Port))
 }

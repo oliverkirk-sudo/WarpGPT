@@ -2,29 +2,43 @@ package officialapi
 
 import (
 	"WarpGPT/pkg/common"
-	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/plugins"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
+	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/gin-gonic/gin"
+	"io"
+	fhttp "net/http"
 	shttp "net/http"
 	"strings"
 )
 
+var context *plugins.Component
+
+type Context struct {
+	GinContext     *gin.Context
+	RequestUrl     string
+	RequestClient  tls_client.HttpClient
+	RequestBody    io.ReadCloser
+	RequestParam   string
+	RequestMethod  string
+	RequestHeaders http.Header
+}
 type OfficialApiProcess struct {
-	common.Process
+	Context Context
 }
 
-func (p *OfficialApiProcess) SetContext(conversation common.Context) {
+func (p *OfficialApiProcess) SetContext(conversation Context) {
 	p.Context = conversation
 }
-func (p *OfficialApiProcess) GetContext() common.Context {
+func (p *OfficialApiProcess) GetContext() Context {
 	return p.Context
 }
 func (p *OfficialApiProcess) ProcessMethod() {
 	var requestBody map[string]interface{}
-	err := common.DecodeRequestBody(p, &requestBody) //解析请求体
+	err := p.decodeRequestBody(&requestBody) //解析请求体
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Incorrect json format"})
 		return
@@ -53,7 +67,7 @@ func (p *OfficialApiProcess) ProcessMethod() {
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
 		err = p.jsonResponse(response)
 		if err != nil {
-			logger.Log.Fatal(err)
+			context.Logger.Fatal(err)
 		}
 	}
 }
@@ -92,7 +106,7 @@ func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
 }
 
 func (p *OfficialApiProcess) streamResponse(response *http.Response) error {
-	logger.Log.Infoln("officialApiProcess stream Request")
+	context.Logger.Infoln("officialApiProcess stream Request")
 	client := tools.NewSSEClient(response.Body)
 	events := client.Read()
 	for event := range events {
@@ -103,4 +117,33 @@ func (p *OfficialApiProcess) streamResponse(response *http.Response) error {
 	}
 	defer client.Close()
 	return nil
+}
+
+type OfficialApiRequestUrl struct {
+}
+
+func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
+	if rawquery == "" {
+		return "https://api.openai.com/v1" + path
+	}
+	return "https://api.openai.com/v1" + path + "?" + rawquery
+}
+func (p *OfficialApiProcess) decodeRequestBody(requestBody *map[string]interface{}) error {
+	conversation := p.GetContext()
+	if conversation.RequestBody != fhttp.NoBody {
+		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {
+			conversation.GinContext.JSON(400, gin.H{"error": "JSON invalid"})
+			return err
+		}
+	}
+	return nil
+}
+
+func Run(com *plugins.Component) {
+	context = com
+	context.Engine.Any("/v1/*path", func(c *gin.Context) {
+		conversation := common.GetContextPack(c, OfficialApiRequestUrl{})
+		p := new(OfficialApiProcess)
+		common.Do[Context](p, Context(conversation))
+	})
 }
