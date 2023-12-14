@@ -142,9 +142,9 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		}
 	} else {
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
-			context.Logger.Debug("Counting the number of tokens")
 			data := p.jsonChatProcess(a)
 			if data != nil {
+				context.Logger.Debug("Counting the number of tokens")
 				p.CompletionTokens = len(tke.Encode(data.Choices[0].Message.Content, nil, nil))
 				data.Usage.PromptTokens = p.PromptTokens
 				data.Usage.CompletionTokens = p.CompletionTokens
