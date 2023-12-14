@@ -1,6 +1,7 @@
 package common
 
 import (
+	"WarpGPT/pkg/logger"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +18,7 @@ func Do[T any](p ContextProcessor[T], conversation T) {
 }
 
 func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {
+	logger.Log.Debug("CopyResponseHeaders")
 	skipHeaders := map[string]bool{"Content-Encoding": true, "Content-Length": true, "transfer-encoding": true, "connection": true}
 	for name, values := range response.Header {
 		if !skipHeaders[name] {

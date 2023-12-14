@@ -9,20 +9,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
+	"github.com/pkoukk/tiktoken-go"
 	"io"
 	shttp "net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	http "github.com/bogdanfinn/fhttp"
-
 	"github.com/gin-gonic/gin"
 )
 
 var context *plugins.Component
 var UnofficialApiProcessInstance UnofficialApiProcess
+var tke, _ = tiktoken.GetEncoding("cl100k_base")
 
 type Context struct {
 	GinContext     *gin.Context
@@ -37,6 +38,8 @@ type UnofficialApiProcess struct {
 	Context          Context
 	ID               string
 	Model            string
+	PromptTokens     int
+	CompletionTokens int
 	OldString        string
 	Mode             string
 	ImagePointerList []ImagePointer
@@ -139,14 +142,20 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		}
 	} else {
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
+			context.Logger.Debug("Counting the number of tokens")
 			data := p.jsonChatProcess(a)
 			if data != nil {
+				p.CompletionTokens = len(tke.Encode(data.Choices[0].Message.Content, nil, nil))
+				data.Usage.PromptTokens = p.PromptTokens
+				data.Usage.CompletionTokens = p.CompletionTokens
+				data.Usage.TotalTokens = p.PromptTokens + p.CompletionTokens
 				p.GetContext().GinContext.Header("Content-Type", "application/json")
 				p.GetContext().GinContext.JSON(response.StatusCode, data)
 				return true
 			}
 			return false
 		})
+
 		if err != nil {
 			return err
 		}
@@ -419,6 +428,7 @@ func (p *UnofficialApiProcess) generateBody(req *ChatReqStr, requestBody map[str
 			role, _ := messageItem["role"].(string)
 			if _, ok := messageItem["content"].(string); ok {
 				content, _ := messageItem["content"].(string)
+				p.PromptTokens += len(tke.Encode(content, nil, nil)) + 7
 				reqMessage := GetChatReqTemplate()
 				reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
 				reqMessage.Author.Role = role

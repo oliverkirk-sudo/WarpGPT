@@ -41,17 +41,17 @@ func (p *BackendProcess) SetContext(conversation Context) {
 func (p *BackendProcess) ProcessMethod() {
 	context.Logger.Debug("ProcessBackendProcess")
 	var requestBody map[string]interface{}
-	err := p.decodeRequestBody(&requestBody) //解析请求体
+	err := p.decodeRequestBody(&requestBody)
 	if err != nil {
 		return
 	}
-	request, err := p.createRequest(requestBody) //创建请求
+	request, err := p.createRequest(requestBody)
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return
 	}
 
-	response, err := p.GetContext().RequestClient.Do(request) //发送请求
+	response, err := p.GetContext().RequestClient.Do(request)
 	if err != nil {
 		var jsonData interface{}
 		err = json.NewDecoder(response.Body).Decode(&jsonData)
@@ -63,16 +63,16 @@ func (p *BackendProcess) ProcessMethod() {
 		return
 	}
 
-	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
+	common.CopyResponseHeaders(response, p.GetContext().GinContext)
 
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
-		err := p.streamResponse(response)
+		err = p.streamResponse(response)
 		if err != nil {
 			return
 		}
 	}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
-		err := p.jsonResponse(response)
+		err = p.jsonResponse(response)
 		if err != nil {
 			context.Logger.Fatal(err)
 		}
