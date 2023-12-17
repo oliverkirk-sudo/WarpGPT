@@ -38,6 +38,7 @@ func (p *OfficialApiProcess) GetContext() Context {
 	return p.Context
 }
 func (p *OfficialApiProcess) ProcessMethod() {
+	context.Logger.Debug("officialApi")
 	var requestBody map[string]interface{}
 	err := p.decodeRequestBody(&requestBody) //解析请求体
 	if err != nil {
@@ -53,6 +54,7 @@ func (p *OfficialApiProcess) ProcessMethod() {
 
 	response, err := p.GetContext().RequestClient.Do(request) //发送请求
 	if err != nil {
+		context.Logger.Error(err)
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server Error"})
 		return
 	}
@@ -74,6 +76,7 @@ func (p *OfficialApiProcess) ProcessMethod() {
 }
 
 func (p *OfficialApiProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
+	context.Logger.Debug("officialApi createRequest")
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, err
@@ -97,6 +100,7 @@ func (p *OfficialApiProcess) WithHeaders(rsq *http.Request) {
 }
 
 func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
+	context.Logger.Debug("officialApi jsonResponse")
 	var jsonData interface{}
 	err := json.NewDecoder(response.Body).Decode(&jsonData)
 	if err != nil {
@@ -107,6 +111,7 @@ func (p *OfficialApiProcess) jsonResponse(response *http.Response) error {
 }
 
 func (p *OfficialApiProcess) streamResponse(response *http.Response) error {
+	context.Logger.Debug("officialApi streamResponse")
 	context.Logger.Infoln("officialApiProcess stream Request")
 	client := tools.NewSSEClient(response.Body)
 	events := client.Read()
@@ -130,6 +135,7 @@ func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	return "https://" + context.Env.OpenaiApiHost + "/v1" + path + "?" + rawquery
 }
 func (p *OfficialApiProcess) decodeRequestBody(requestBody *map[string]interface{}) error {
+	context.Logger.Debug("officialApi decodeRequestBody")
 	conversation := p.GetContext()
 	if conversation.RequestBody != fhttp.NoBody {
 		if err := json.NewDecoder(conversation.RequestBody).Decode(requestBody); err != nil {

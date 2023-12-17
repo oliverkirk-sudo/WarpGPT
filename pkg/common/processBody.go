@@ -20,7 +20,8 @@ func Do[T any](p ContextProcessor[T], conversation T) {
 func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {
 	logger.Log.Debug("CopyResponseHeaders")
 	if response == nil {
-		logger.Log.Fatal("response is empty")
+		ctx.JSON(400, gin.H{"error": "response is empty"})
+		logger.Log.Warning("response is empty")
 	}
 	skipHeaders := map[string]bool{"Content-Encoding": true, "Content-Length": true, "transfer-encoding": true, "connection": true}
 	for name, values := range response.Header {
