@@ -125,9 +125,9 @@ type OfficialApiRequestUrl struct {
 
 func (u OfficialApiRequestUrl) Generate(path string, rawquery string) string {
 	if rawquery == "" {
-		return "https://api.openai.com/v1" + path
+		return "https://" + context.Env.OpenaiApiHost + "/v1" + path
 	}
-	return "https://api.openai.com/v1" + path + "?" + rawquery
+	return "https://" + context.Env.OpenaiApiHost + "/v1" + path + "?" + rawquery
 }
 func (p *OfficialApiProcess) decodeRequestBody(requestBody *map[string]interface{}) error {
 	conversation := p.GetContext()
