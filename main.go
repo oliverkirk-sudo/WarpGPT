@@ -59,9 +59,9 @@ func main() {
 		Env:    &env.Env,
 		Auth:   funcaptcha.GetOpenAIArkoseToken,
 	}
-	var plugins []plugins.Plugin
-	plugins = append(
-		plugins,
+	var plugin_list []plugins.Plugin
+	plugin_list = append(
+		plugin_list,
 		&arkosetoken.ArkoseTokenInstance,
 		&session.SessionTokenInstance,
 		&backendapi.BackendProcessInstance,
@@ -71,7 +71,7 @@ func main() {
 		&rapi.ApiProcessInstance,
 		&proxypool.ProxyPoolInstance,
 	)
-	for _, plugin := range plugins {
+	for _, plugin := range plugin_list {
 		plugin.Run(component)
 	}
 	router.Any("/*path", func(context *gin.Context) {
