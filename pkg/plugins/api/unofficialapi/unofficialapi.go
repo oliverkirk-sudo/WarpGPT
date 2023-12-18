@@ -107,7 +107,7 @@ func (p *UnofficialApiProcess) imageApiProcess(requestBody map[string]interface{
 	})
 	if err = p.getImageUrlByPointer(&p.ImagePointerList, result); err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "get image url failed"})
-		context.Logger.Fatal(err)
+		context.Logger.Warning(err)
 	}
 	if result.ApiImageGenerationRespStr.Created != 0 {
 		p.GetContext().GinContext.Header("Content-Type", "application/json")
@@ -131,7 +131,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 			data := p.streamChatProcess(a)
 			if _, err = p.GetContext().GinContext.Writer.Write([]byte(data)); err != nil {
-				context.Logger.Fatal(err)
+				context.Logger.Warning(err)
 				return true
 			}
 			p.GetContext().GinContext.Writer.Flush()
@@ -277,13 +277,13 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 	} else if result.ApiRespStrStreamEnd.Id != "" {
 		data, err := json.Marshal(result.ApiRespStrStreamEnd)
 		if err != nil {
-			context.Logger.Fatal(err)
+			context.Logger.Warning(err)
 		}
 		return "data: " + string(data) + "\n\n"
 	} else if result.ApiRespStrStream.Id != "" {
 		data, err := json.Marshal(result.ApiRespStrStream)
 		if err != nil {
-			context.Logger.Fatal(err)
+			context.Logger.Warning(err)
 		}
 		return "data: " + string(data) + "\n\n"
 	}

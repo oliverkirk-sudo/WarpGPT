@@ -61,7 +61,7 @@ func (p *ApiProcess) ProcessMethod() {
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
 		err := p.jsonResponse(response)
 		if err != nil {
-			context.Logger.Fatal(err)
+			context.Logger.Warning(err)
 		}
 	}
 	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头

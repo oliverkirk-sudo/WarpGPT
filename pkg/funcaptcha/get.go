@@ -12,7 +12,7 @@ func GetOpenAIArkoseToken(arkType int, puid string) (string, error) {
 	WithHarpool(solver)
 	token, err := solver.GetOpenAIToken(arkVer(arkType), puid)
 	if err != nil {
-		logger.Log.Fatal(err)
+		logger.Log.Warning(err)
 		return "", err
 	}
 	return token, nil

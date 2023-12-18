@@ -240,7 +240,7 @@ func GetChatReqStr(model string) *ChatReqStr {
 	t.ParentMessageId = uuid.New().String()
 	t.Model = model
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -260,7 +260,7 @@ func GetChatReqTemplate() *ChatReqTemplate {
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.Id = uuid.New().String()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -284,7 +284,7 @@ func GetChatFileReqTemplate() *ChatReqTemplate {
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.Id = uuid.New().String()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -334,7 +334,7 @@ func GetChatRespStr() *ChatRespStr {
 	floatTime, _ := strconv.ParseFloat(nowTime, 64)
 	t.Message.CreateTime = floatTime
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -352,7 +352,7 @@ func GetChatEndRespStr() *ChatEndRespStr {
 	t := new(ChatEndRespStr)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -365,7 +365,7 @@ func GetChatUserSystemMsgReqStr() *ChatUserSystemMsgReqStr {
 	t := new(ChatUserSystemMsgReqStr)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -389,7 +389,7 @@ func GetApiRespStr(id string) *ApiRespStr {
 	t.Id = id
 	t.Created = time.Now().Unix()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -429,7 +429,7 @@ func GetApiRespStrStream(id string) *ApiRespStrStream {
 	t.Id = id
 	t.Created = time.Now().Unix()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -453,7 +453,7 @@ func GetApiRespStrStreamEnd(id string) *ApiRespStrStreamEnd {
 	t.Id = id
 	t.Created = time.Now().Unix()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -471,7 +471,7 @@ func GetApiImageGenerationRespStr() *ApiImageGenerationRespStr {
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	t.Created = time.Now().Unix()
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -486,7 +486,7 @@ func GetStreamChoice() *StreamChoice {
 	t := new(StreamChoice)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }
@@ -502,7 +502,7 @@ func GetStrChoices() *StrChoices {
 	t := new(StrChoices)
 	err := json.Unmarshal([]byte(jsonStr), &t)
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Warningf("Error parsing JSON: %v", err)
 	}
 	return t
 }

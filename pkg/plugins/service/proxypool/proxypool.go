@@ -82,7 +82,7 @@ func (p *ProxyPool) putIpsInRedis() error {
 		return err
 	}
 	if err != nil {
-		context.Logger.Fatal(err)
+		context.Logger.Warning(err)
 		return err
 	}
 	for _, ip := range proxyList.Data {
@@ -112,7 +112,7 @@ func (p *ProxyPool) GetIpInRedis() (string, error) {
 		return "", err
 	}
 	if size == 0 {
-		context.Logger.Fatal("数据库为空,无法获取代理ip,尝试获取")
+		context.Logger.Warning("数据库为空,无法获取代理ip,尝试获取")
 		err = p.putIpsInRedis()
 		if err != nil {
 			return "", err
@@ -146,7 +146,7 @@ func (p *ProxyPool) ProxyThread() {
 		case <-ticker.C:
 			err := p.checkProxy()
 			if err != nil {
-				context.Logger.Fatal(err.Error())
+				context.Logger.Warning(err.Error())
 				return
 			}
 		}

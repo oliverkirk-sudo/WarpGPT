@@ -70,7 +70,7 @@ func (p *OfficialApiProcess) ProcessMethod() {
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
 		err = p.jsonResponse(response)
 		if err != nil {
-			context.Logger.Fatal(err)
+			context.Logger.Warning(err)
 		}
 	}
 }
