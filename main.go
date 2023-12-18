@@ -74,8 +74,5 @@ func main() {
 	for _, plugin := range plugin_list {
 		plugin.Run(component)
 	}
-	router.Any("/*path", func(context *gin.Context) {
-		context.JSON(404, "Not Found")
-	})
 	router.Run(env.Env.Host + ":" + strconv.Itoa(env.Env.Port))
 }
