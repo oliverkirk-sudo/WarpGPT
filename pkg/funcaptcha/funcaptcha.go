@@ -1,12 +1,14 @@
 package funcaptcha
 
 import (
+	"WarpGPT/pkg/env"
 	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -148,7 +150,7 @@ func WithHarData(harData HARData) solverArg {
 }
 
 func WithHarpool(s *Solver) {
-	dirPath := "./harPool"
+	dirPath := path.Join(path.Dir(env.EnvFile), "harPool")
 	var harPath []string
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
