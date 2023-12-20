@@ -183,7 +183,6 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 	}
 	request, err := p.createRequest(requestData) //创建请求
 	if err != nil {
-		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server error"})
 		return nil, err
 	}
 	response, err := p.GetContext().RequestClient.Do(request)       //发送请求
