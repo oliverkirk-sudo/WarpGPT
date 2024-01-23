@@ -128,19 +128,21 @@ output:
 - 在harPool目录中加入har文件，实现登录验证与gpt4对话验证
 - 将.env.temp修改为.env，修改配置项后保存
 ``` python
-proxy = "http://127.0.0.1:10809"
-port = 5000
-host = '127.0.0.1'
-verify = false
-auth_key = ""
-arkose_must = false
-OpenAI_HOST = "chat.openai.com"
-proxy_pool_url=""
-log_level = "debug"
+proxy = "http://127.0.0.1:10809"   #代理地址
+port = 5000                        #程序运行端口
+host = '127.0.0.1'                 #可访问ip，0.0.0.0允许所以ip
+verify = false                     #是否对访问进行验证
+auth_key = ""                      #若开启访问验证，则需要在Header中添加AuthKey字段，且值为auth_key的值才能访问 （选填）
+arkose_must = false                #是否强行gpt3.5进行验证
+OpenAI_HOST = "chat.openai.com"    #openai网页api接口地址 （选填）
+openai_api_host = "api.openai.com" #openai官方api接口 （选填）
+proxy_pool_url=""                  #ipidea代理池链接 （选填）
+#示例http://api.proxy.ipidea.io/getProxyIp?num=10&return_type=json&lb=1&sb=0&flow=1&regions=us&protocol=http，根据访问频次设置num值
+log_level = "debug"                #日志等级
 
-redis_address = "127.0.0.1:6379"
-redis_passwd = ""
-redis_db = 0
+redis_address = "127.0.0.1:6379"   #redis地址（若不开启代理池可选填）
+redis_passwd = ""                  #redis密码
+redis_db = 0                       #选择的redis数据库
 ```
 其中proxy_pool_url使用的是[ipidea](https://share.ipidea.net/8hPKah)的代理池，注册送100M流量，无限ip，一个月，测试足够
 使用代理池后需要填写redis信息，redis版本需要7以上
