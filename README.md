@@ -123,14 +123,14 @@ output:
 }
 ```
 
-## 使用方法
+## 代码部署
 ### 配置文件
 - 在harPool目录中加入har文件，实现登录验证与gpt4对话验证
-- 将.env.temp修改为.env，修改配置项后保存
+- 复制一份.env.temp，并修改名称为.env，修改配置项后保存
 ``` python
-proxy = "http://127.0.0.1:10809"   #代理地址
+proxy = "http://127.0.0.1:10809"   #代理地址 （选填）
 port = 5000                        #程序运行端口
-host = '127.0.0.1'                 #可访问ip，0.0.0.0允许所以ip
+host = '127.0.0.1'                 #可访问ip，0.0.0.0允许所有ip
 verify = false                     #是否对访问进行验证
 auth_key = ""                      #若开启访问验证，则需要在Header中添加AuthKey字段，且值为auth_key的值才能访问 （选填）
 arkose_must = false                #是否强行gpt3.5进行验证
@@ -149,3 +149,16 @@ redis_db = 0                       #选择的redis数据库
 ### 运行
 
 `go build && ./WarpGPT`
+
+## Docker部署
+首先克隆代码
+```shell
+git clone https://github.com/oliverkirk-sudo/WarpGPT.git
+cd WarpGPT
+```
+正确配置.env文件，在harPool中放入har文件
+（其中host应该为0.0.0.0）
+```shell
+docker build -t warpgpt .
+docker run -d -p 5000:5000 warpgpt
+```
