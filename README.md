@@ -125,7 +125,7 @@ output:
 
 ## 代码部署
 ### 配置文件
-- 在harPool目录中加入har文件，实现登录验证与gpt4对话验证
+- 在harPool目录中加入har文件，实现登录验证与gpt4对话验证([获取har教程](./getHar.md))
 - 复制一份.env.temp，并修改名称为.env，修改配置项后保存
 ``` python
 proxy = "http://127.0.0.1:10809"   #代理地址 （选填）
@@ -162,3 +162,4 @@ cd WarpGPT
 docker build -t warpgpt .
 docker run -d -p 5000:5000 warpgpt
 ```
+
