@@ -196,11 +196,17 @@ func (auth *Authenticator) partTwo(url string) *Error {
 	logger.Log.Debug("Auth Two")
 
 	headers := map[string]string{
-		"Host":            "auth0.openai.com",
-		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-		"Connection":      "keep-alive",
-		"User-Agent":      auth.UserAgent,
-		"Accept-Language": "en-US,en;q=0.9",
+		"Host":                        "auth0.openai.com",
+		"Accept":                      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Connection":                  "keep-alive",
+		"User-Agent":                  auth.UserAgent,
+		"Accept-Language":             "en-US,en;q=0.9",
+		"Referer":                     "https://chat.openai.com/",
+		"Sec-Ch-Ua":                   "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"",
+		"Sec-Ch-Ua-Arch":              "\"x86\"",
+		"Sec-Ch-Ua-Bitness":           "\"64\"",
+		"Sec-Ch-Ua-Full-Version":      "\"121.0.6167.161\"",
+		"Sec-Ch-Ua-Full-Version-List": "\"Not A(Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"121.0.6167.161\", \"Chromium\";v=\"121.0.6167.161\"",
 	}
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -216,7 +222,6 @@ func (auth *Authenticator) partTwo(url string) *Error {
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode == 302 || resp.StatusCode == 200 {
-
 		stateRegex := regexp.MustCompile(`state=(.*)`)
 		stateMatch := stateRegex.FindStringSubmatch(string(body))
 		if len(stateMatch) < 2 {

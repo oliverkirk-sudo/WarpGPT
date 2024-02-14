@@ -84,12 +84,13 @@ func (p *BackendProcess) createRequest(requestBody map[string]interface{}) (*htt
 	if p.Context.RequestBody == shttp.NoBody {
 		request, _ = http.NewRequest(p.Context.RequestMethod, p.Context.RequestUrl, nil)
 	} else {
-		err := p.addArkoseTokenIfNeeded(&requestBody)
+		token, err := p.addArkoseTokenIfNeeded(&requestBody)
 		if err != nil {
 			return nil, err
 		}
 		bodyBytes, err := json.Marshal(requestBody)
 		request, err = http.NewRequest(p.Context.RequestMethod, p.Context.RequestUrl, bytes.NewBuffer(bodyBytes))
+		p.addArkoseTokenInHeaderIfNeeded(request, token)
 		if err != nil {
 			return nil, err
 		}
@@ -142,21 +143,25 @@ func (p *BackendProcess) streamResponse(response *http.Response) error {
 	defer client.Close()
 	return nil
 }
-func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) error {
+func (p *BackendProcess) addArkoseTokenInHeaderIfNeeded(request *http.Request, token string) {
+	request.Header.Set("Openai-Sentinel-Arkose-Token", token)
+}
+func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) (string, error) {
 	context.Logger.Debug("BackendProcess addArkoseTokenIfNeeded")
 	model, exists := (*requestBody)["model"]
 	if !exists {
-		return nil
+		return "", nil
 	}
 	if strings.HasPrefix(model.(string), "gpt-4") || context.Env.ArkoseMust {
 		token, err := funcaptcha.GetOpenAIArkoseToken(4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
-			return err
+			return "", err
 		}
 		(*requestBody)["arkose_token"] = token
+		return token, nil
 	}
-	return nil
+	return "", nil
 }
 func (p *BackendProcess) setCookies(request *http.Request) {
 	context.Logger.Debug("BackendProcess setCookies")
