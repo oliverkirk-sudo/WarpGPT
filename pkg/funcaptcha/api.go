@@ -105,7 +105,7 @@ func (s *Solver) sendRequest(arkType arkVer, bda string, puid string) (string, e
 		return "", err
 	}
 	// Check if rid is empty
-	if !strings.Contains(arkose.Token, "sup=1|rid=") {
+	if !strings.Contains(arkose.Token, "pk=") {
 		return arkose.Token, errors.New("captcha required")
 	}
 

@@ -253,6 +253,7 @@ func (p *UnofficialApiProcess) buildHeaders(request *http.Request) {
 	}
 }
 func (p *UnofficialApiProcess) addArkoseTokenInHeaderIfNeeded(request *http.Request, token string) {
+	context.Logger.Debug("UnofficialApiProcess addArkoseTokenInHeaderIfNeeded")
 	request.Header.Set("Openai-Sentinel-Arkose-Token", token)
 }
 func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) (string, error) {

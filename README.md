@@ -116,7 +116,8 @@ output:
 }
 ```
 ```
-/token methods:["GET"]
+/token/:id methods:["GET"]
+eg: /token/0A1D34FC-659D-4E23-B17B-694DCFCF6A6C
 output:
 {
     "token": ""

@@ -108,6 +108,7 @@ func (p *BackendProcess) buildHeaders(request *http.Request) {
 		"Connection":    "keep-alive",
 		"User-Agent":    context.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
+		"Accept":        p.GetContext().GinContext.Request.Header.Get("Accept"),
 	}
 
 	for key, value := range headers {
@@ -144,6 +145,7 @@ func (p *BackendProcess) streamResponse(response *http.Response) error {
 	return nil
 }
 func (p *BackendProcess) addArkoseTokenInHeaderIfNeeded(request *http.Request, token string) {
+	context.Logger.Debug("BackendProcess addArkoseTokenInHeaderIfNeeded")
 	request.Header.Set("Openai-Sentinel-Arkose-Token", token)
 }
 func (p *BackendProcess) addArkoseTokenIfNeeded(requestBody *map[string]interface{}) (string, error) {
