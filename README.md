@@ -163,3 +163,5 @@ docker build -t warpgpt .
 docker run -d -p 5000:5000 warpgpt
 ```
 
+## License
+Apache-2.0
