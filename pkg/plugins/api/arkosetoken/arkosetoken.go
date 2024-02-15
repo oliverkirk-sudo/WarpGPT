@@ -27,6 +27,7 @@ type ArkoseToken struct {
 }
 
 func (p *ArkoseToken) GetContext() Context {
+	p.Context.RequestClient = common.GetHttpClient()
 	return p.Context
 }
 func (p *ArkoseToken) SetContext(conversation Context) {

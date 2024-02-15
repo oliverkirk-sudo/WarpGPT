@@ -90,7 +90,9 @@ func (p *BackendProcess) createRequest(requestBody map[string]interface{}) (*htt
 		}
 		bodyBytes, err := json.Marshal(requestBody)
 		request, err = http.NewRequest(p.Context.RequestMethod, p.Context.RequestUrl, bytes.NewBuffer(bodyBytes))
-		p.addArkoseTokenInHeaderIfNeeded(request, token)
+		if token != "" {
+			p.addArkoseTokenInHeaderIfNeeded(request, token)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +110,6 @@ func (p *BackendProcess) buildHeaders(request *http.Request) {
 		"Connection":    "keep-alive",
 		"User-Agent":    context.Env.UserAgent,
 		"Content-Type":  p.GetContext().GinContext.Request.Header.Get("Content-Type"),
-		"Accept":        p.GetContext().GinContext.Request.Header.Get("Accept"),
 	}
 
 	for key, value := range headers {

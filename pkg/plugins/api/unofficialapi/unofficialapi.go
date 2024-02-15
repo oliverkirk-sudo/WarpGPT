@@ -219,7 +219,9 @@ func (p *UnofficialApiProcess) createRequest(requestBody map[string]interface{})
 	if err != nil {
 		return nil, err
 	}
-	p.addArkoseTokenInHeaderIfNeeded(request, token)
+	if token != "" {
+		p.addArkoseTokenInHeaderIfNeeded(request, token)
+	}
 	p.buildHeaders(request)
 	p.setCookies(request)
 	return request, nil
