@@ -18,7 +18,7 @@
 /getsession (实现__Secure-next-auth.session-token刷新session，返回session,或输入username与password输出session)
 /token (获取ArkoseToken)
 ```
-目前ws逆向仅支持3.5，4有些问题
+目前ws逆向仅支持3.5，4有些问题，看ip纯度，纯度高就能输出
 ```
 /r/v1/chat/completions method:["GET", "POST", "OPTIONS"]
 input:
