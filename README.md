@@ -8,14 +8,17 @@
 端口列表
 ```
 /backend-api/* (前端逆向接口)
+/backend-api/backend-api/conversation/ws (前端WS逆向为原数据流格式)
 /api/* (前端逆向接口)
 /public-api/* (前端逆向接口)
 /v1/* (官方api代理)
 /r/v1/chat/completions (前端接口转标准api,支持流式)
+/r/v1/chat/completions/ws (前端WS转标准api,支持流式)
 /r/v1/images/generations (前端接口转标准api,不支持流式,只支持gpt-4的账户)
 /getsession (实现__Secure-next-auth.session-token刷新session，返回session,或输入username与password输出session)
 /token (获取ArkoseToken)
 ```
+目前ws逆向仅支持3.5，4有些问题
 ```
 /r/v1/chat/completions method:["GET", "POST", "OPTIONS"]
 input:

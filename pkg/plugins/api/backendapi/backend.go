@@ -3,7 +3,9 @@ package backendapi
 import (
 	"WarpGPT/pkg/common"
 	"WarpGPT/pkg/funcaptcha"
+	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/plugins"
+	"WarpGPT/pkg/plugins/service/wsstostream"
 	"WarpGPT/pkg/tools"
 	"bytes"
 	"encoding/json"
@@ -13,6 +15,7 @@ import (
 	"io"
 	shttp "net/http"
 	"strings"
+	"time"
 )
 
 var context *plugins.Component
@@ -27,8 +30,17 @@ type Context struct {
 	RequestMethod  string
 	RequestHeaders http.Header
 }
+
+type WsResponse struct {
+	ConversationId string    `json:"conversation_id"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	ResponseId     string    `json:"response_id"`
+	WssUrl         string    `json:"wss_url"`
+}
+
 type BackendProcess struct {
-	Context Context
+	ConversationId string
+	Context        Context
 }
 
 func (p *BackendProcess) GetContext() Context {
@@ -48,18 +60,27 @@ func (p *BackendProcess) ProcessMethod() {
 	request, err := p.createRequest(requestBody)
 	if err != nil {
 		p.GetContext().GinContext.JSON(500, gin.H{"error": "Server error"})
+		context.Logger.Error(err)
 		return
 	}
-
+	ws := wsstostream.NewWssToStream(p.GetContext().RequestHeaders.Get("Authorization"))
+	err = ws.InitConnect()
+	if err != nil {
+		context.Logger.Error(err)
+		return
+	}
+	context.Logger.Debug("Requesting to ", p.GetContext().RequestUrl)
 	response, err := p.GetContext().RequestClient.Do(request)
 	if err != nil {
 		var jsonData interface{}
 		err = json.NewDecoder(response.Body).Decode(&jsonData)
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
+			context.Logger.Error(err)
 			return
 		}
 		p.GetContext().GinContext.JSON(response.StatusCode, jsonData)
+		context.Logger.Error(err)
 		return
 	}
 
@@ -68,13 +89,64 @@ func (p *BackendProcess) ProcessMethod() {
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
 		err = p.streamResponse(response)
 		if err != nil {
+			context.Logger.Error(err)
 			return
 		}
 	}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
-		err = p.jsonResponse(response)
-		if err != nil {
-			context.Logger.Warning(err)
+		if p.Context.RequestParam == "/conversation/ws" {
+			context.Logger.Debug("WsToStreamResponse")
+			p.WsToStreamResponse(ws, response)
+		} else {
+			err = p.jsonResponse(response)
+			if err != nil {
+				context.Logger.Error(err)
+				return
+			}
+		}
+	}
+}
+func (p *BackendProcess) WsToStreamResponse(ws *wsstostream.WssToStream, response *http.Response) {
+	var jsonData WsResponse
+	err := json.NewDecoder(response.Body).Decode(&jsonData)
+	if err != nil {
+		context.Logger.Error(err)
+	}
+	ws.ResponseId = jsonData.ResponseId
+	ws.ConversationId = jsonData.ConversationId
+	p.GetContext().GinContext.Writer.Header().Set("Content-Type", "text/event-stream")
+	p.GetContext().GinContext.Writer.Header().Set("Cache-Control", "no-cache")
+	p.GetContext().GinContext.Writer.Header().Set("Connection", "keep-alive")
+	ctx := p.GetContext().GinContext.Request.Context()
+	for {
+		select {
+		case <-p.GetContext().GinContext.Writer.CloseNotify():
+			logger.Log.Debug("WsToStreamResponse Writer.CloseNotify")
+			return
+		case <-ctx.Done():
+			logger.Log.Debug("WsToStreamResponse ctx.Done")
+			return
+		default:
+			message, err := ws.ReadMessage()
+			if err != nil {
+				context.Logger.Error(err)
+				break
+			}
+			if message != nil {
+				data, err := io.ReadAll(message)
+				if err != nil {
+					context.Logger.Error(err)
+					return
+				}
+				_, writeErr := p.GetContext().GinContext.Writer.Write(data)
+				if writeErr != nil {
+					return
+				}
+				p.GetContext().GinContext.Writer.Flush()
+				if strings.Contains(string(data), "data: [DONE]") {
+					return
+				}
+			}
 		}
 	}
 }
@@ -120,7 +192,6 @@ func (p *BackendProcess) buildHeaders(request *http.Request) {
 		request.Header.Set("cookie", "_puid="+puid+";")
 	}
 }
-
 func (p *BackendProcess) jsonResponse(response *http.Response) error {
 	context.Logger.Debug("BackendProcess jsonResponse")
 	var jsonData interface{}
@@ -191,6 +262,9 @@ type ReverseBackendRequestUrl struct {
 }
 
 func (u ReverseBackendRequestUrl) Generate(path string, rawquery string) string {
+	if strings.Contains(path, "/ws") {
+		path = strings.ReplaceAll(path, "/ws", "")
+	}
 	if rawquery == "" {
 		return "https://" + context.Env.OpenaiHost + "/backend-api" + path
 	}

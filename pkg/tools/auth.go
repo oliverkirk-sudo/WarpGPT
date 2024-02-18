@@ -94,8 +94,8 @@ func (auth *Authenticator) URLEncode(str string) string {
 func (auth *Authenticator) Begin() *Error {
 	logger.Log.Debug("Auth Begin")
 
-	url := "https://" + env.Env.OpenaiHost + "/api/auth/csrf"
-	req, err := http.NewRequest("GET", url, nil)
+	target := "https://" + env.Env.OpenaiHost + "/api/auth/csrf"
+	req, err := http.NewRequest("GET", target, nil)
 	if err != nil {
 		return NewError("begin", 0, "", err)
 	}
@@ -192,7 +192,7 @@ func (auth *Authenticator) partOne(csrfToken string) *Error {
 	}
 }
 
-func (auth *Authenticator) partTwo(url string) *Error {
+func (auth *Authenticator) partTwo(target string) *Error {
 	logger.Log.Debug("Auth Two")
 
 	headers := map[string]string{
@@ -209,7 +209,7 @@ func (auth *Authenticator) partTwo(url string) *Error {
 		"Sec-Ch-Ua-Full-Version-List": "\"Not A(Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"121.0.6167.161\", \"Chromium\";v=\"121.0.6167.161\"",
 	}
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", target, nil)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -238,7 +238,7 @@ func (auth *Authenticator) partTwo(url string) *Error {
 func (auth *Authenticator) partThree(state string) *Error {
 	logger.Log.Debug("Auth Three")
 
-	url := fmt.Sprintf("https://auth0.openai.com/u/login/identifier?state=%s", state)
+	target := fmt.Sprintf("https://auth0.openai.com/u/login/identifier?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
 
 	payload := fmt.Sprintf(
@@ -257,7 +257,7 @@ func (auth *Authenticator) partThree(state string) *Error {
 		"Content-Type":    "application/x-www-form-urlencoded",
 	}
 
-	req, _ := http.NewRequest("POST", url, strings.NewReader(payload))
+	req, _ := http.NewRequest("POST", target, strings.NewReader(payload))
 
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -280,7 +280,7 @@ func (auth *Authenticator) partThree(state string) *Error {
 func (auth *Authenticator) partFour(state string) *Error {
 	logger.Log.Debug("Auth Four")
 
-	url := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
+	target := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
 	passwordURLEncoded := auth.URLEncode(auth.Password)
 	payload := fmt.Sprintf("state=%s&username=%s&password=%s&action=default", state, emailURLEncoded, passwordURLEncoded)
@@ -296,7 +296,7 @@ func (auth *Authenticator) partFour(state string) *Error {
 		"Content-Type":    "application/x-www-form-urlencoded",
 	}
 
-	req, _ := http.NewRequest("POST", url, strings.NewReader(payload))
+	req, _ := http.NewRequest("POST", target, strings.NewReader(payload))
 
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -331,7 +331,7 @@ func (auth *Authenticator) partFour(state string) *Error {
 func (auth *Authenticator) partFive(oldState string, redirectURL string) *Error {
 	logger.Log.Debug("Auth Five")
 
-	url := "https://auth0.openai.com" + redirectURL
+	target := "https://auth0.openai.com" + redirectURL
 
 	headers := map[string]string{
 		"Host":            "auth0.openai.com",
@@ -342,7 +342,7 @@ func (auth *Authenticator) partFive(oldState string, redirectURL string) *Error 
 		"Referer":         fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", oldState),
 	}
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", target, nil)
 
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -355,7 +355,7 @@ func (auth *Authenticator) partFive(oldState string, redirectURL string) *Error 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 302 {
-		return auth.partSix(resp.Header.Get("Location"), url)
+		return auth.partSix(resp.Header.Get("Location"), target)
 	} else {
 		return NewError("part_five", resp.StatusCode, resp.Status, fmt.Errorf("error: Check details"))
 

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"WarpGPT/pkg/logger"
+	"WarpGPT/pkg/plugins/service/wsstostream"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,6 +27,12 @@ var context *plugins.Component
 var UnofficialApiProcessInstance UnofficialApiProcess
 var tke, _ = tiktoken.GetEncoding("cl100k_base")
 
+type WsResponse struct {
+	ConversationId string    `json:"conversation_id"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	ResponseId     string    `json:"response_id"`
+	WssUrl         string    `json:"wss_url"`
+}
 type Context struct {
 	GinContext     *gin.Context
 	RequestUrl     string
@@ -36,6 +44,8 @@ type Context struct {
 }
 type UnofficialApiProcess struct {
 	Context          Context
+	WS               *wsstostream.WssToStream
+	Response         *http.Response
 	ID               string
 	Model            string
 	PromptTokens     int
@@ -77,17 +87,17 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
 		return
 	}
-	if strings.HasSuffix(p.GetContext().RequestParam, "chat/completions") {
+	if strings.Contains(p.GetContext().RequestParam, "chat/completions") {
 		p.Mode = "chat"
 		if err = p.chatApiProcess(requestBody); err != nil {
-			println(err.Error())
+			logger.Log.Error(err)
 			return
 		}
 	}
-	if strings.HasSuffix(p.GetContext().RequestParam, "images/generations") {
+	if strings.Contains(p.GetContext().RequestParam, "images/generations") {
 		p.Mode = "image"
 		if err = p.imageApiProcess(requestBody); err != nil {
-			println(err.Error())
+			logger.Log.Error(err)
 			return
 		}
 	}
@@ -185,13 +195,21 @@ func (p *UnofficialApiProcess) MakeRequest(requestBody map[string]interface{}) (
 	if err != nil {
 		return nil, err
 	}
+	ws := wsstostream.NewWssToStream(p.GetContext().RequestHeaders.Get("Authorization"))
+	err = ws.InitConnect()
+	p.WS = ws
+	if err != nil {
+		logger.Log.Error(err)
+		p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
+		return nil, err
+	}
 	response, err := p.GetContext().RequestClient.Do(request)       //发送请求
 	common.CopyResponseHeaders(response, p.GetContext().GinContext) //设置响应头
 	if err != nil {
 		var responseBody interface{}
 		err = json.NewDecoder(response.Body).Decode(&responseBody)
 		if err != nil {
-			p.GetContext().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			return nil, err
 		}
 		p.GetContext().GinContext.JSON(response.StatusCode, responseBody)
@@ -299,7 +317,24 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 
 func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *UnofficialApiProcess, a string) bool) error {
 	context.Logger.Debug("UnofficialApiProcess streamResponse")
-	client := tools.NewSSEClient(response.Body)
+	var client *tools.SSEClient
+	if p.Context.RequestParam == "/chat/completions/ws" || p.Context.RequestParam == "/images/generations/ws" {
+		var jsonData WsResponse
+		err := json.NewDecoder(response.Body).Decode(&jsonData)
+		if err != nil {
+			logger.Log.Error(err)
+			return err
+		}
+		p.WS.ResponseId = jsonData.ResponseId
+		p.WS.ConversationId = jsonData.ConversationId
+		p.GetContext().GinContext.Writer.Header().Set("Content-Type", "text/event-stream")
+		p.GetContext().GinContext.Writer.Header().Set("Cache-Control", "no-cache")
+		p.GetContext().GinContext.Writer.Header().Set("Connection", "keep-alive")
+		logger.Log.Debug("wss to stream")
+		client = tools.NewSSEClient(p.WS)
+	} else {
+		client = tools.NewSSEClient(response.Body)
+	}
 	events := client.Read()
 	for event := range events {
 		if event.Event == "message" {
@@ -424,6 +459,7 @@ func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 func (p *UnofficialApiProcess) generateBody(req *ChatReqStr, requestBody map[string]interface{}) error {
 	context.Logger.Debug("UnofficialApiProcess generateBody")
 	if p.Mode == "chat" {
+		logger.Log.Debug("Generate Chat Body")
 		messageList, exists := requestBody["messages"]
 		if !exists {
 			return errors.New("no message body")
@@ -454,6 +490,7 @@ func (p *UnofficialApiProcess) generateBody(req *ChatReqStr, requestBody map[str
 		}
 	}
 	if p.Mode == "image" {
+		logger.Log.Debug("Generate Image Body")
 		prompt, exists := requestBody["prompt"]
 		if !exists {
 			return errors.New("please provide prompt")
@@ -469,7 +506,7 @@ func (p *UnofficialApiProcess) generateBody(req *ChatReqStr, requestBody map[str
 		reqMessage := GetChatReqTemplate()
 		reqMessage.Content.Parts = reqMessage.Content.Parts[:0]
 		reqMessage.Author.Role = "user"
-		reqMessage.Content.Parts = append(reqMessage.Content.Parts, fmt.Sprintf("Requirements for image generation:\n- ImageCount: %s\n- Size: %s\n- Prompt:  [%s]\n- Requirements: Using the DALLE tool, each image is generated according to the number of ImageCount. It is not allowed to contain multiple elements in one image. You must call the tool multiple times to generate the number of ImageCount images, and the details of each image are different\n", count, size, prompt))
+		reqMessage.Content.Parts = append(reqMessage.Content.Parts, fmt.Sprintf("Requirements for image generation:\n- ImageCount: %d\n- Size: %s\n- Prompt:  [%s]\n- Requirements: Using the DALLE tool, each image is generated according to the number of ImageCount. It is not allowed to contain multiple elements in one image. You must call the tool multiple times to generate the number of ImageCount images, and the details of each image are different\n", int(count.(float64)), size.(string), prompt.(string)))
 		req.Messages = append(req.Messages, *reqMessage)
 	}
 

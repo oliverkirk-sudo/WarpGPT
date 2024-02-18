@@ -23,6 +23,8 @@ type ENV struct {
 	RedisPasswd     string
 	RedisDB         int
 	PostgreSQLDBURI string
+	CapSolverCn     bool
+	CapClientID     string
 }
 
 var Env ENV
@@ -65,6 +67,10 @@ func init() {
 		panic("配置proxyPoolUrl后未配置redis_address")
 	}
 	redisDb, err := strconv.Atoi(os.Getenv("redis_db"))
+	capSolverCn, err := strconv.ParseBool(os.Getenv("cap_solver_cn"))
+	if err != nil {
+		capSolverCn = true
+	}
 	if err != nil && proxyPoolUrl != "" {
 		panic("DB填写出现问题")
 	}
@@ -84,5 +90,7 @@ func init() {
 		RedisPasswd:     os.Getenv("redis_passwd"),
 		RedisDB:         redisDb,
 		PostgreSQLDBURI: os.Getenv("postgreSQL_db_URI"),
+		CapSolverCn:     capSolverCn,
+		CapClientID:     os.Getenv("cap_client_id"),
 	}
 }

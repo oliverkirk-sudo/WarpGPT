@@ -27,7 +27,7 @@ func CopyResponseHeaders(response *fhttp.Response, ctx *gin.Context) {
 	for name, values := range response.Header {
 		if !skipHeaders[name] {
 			for _, value := range values {
-				ctx.Header(name, value)
+				ctx.Writer.Header().Set(name, value)
 			}
 		}
 	}
