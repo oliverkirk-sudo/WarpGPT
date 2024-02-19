@@ -4,7 +4,6 @@ import (
 	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/funcaptcha"
 	"WarpGPT/pkg/logger"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	http "github.com/bogdanfinn/fhttp"
@@ -283,13 +282,13 @@ func (auth *Authenticator) partFour(state string) *Error {
 	target := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
 	passwordURLEncoded := auth.URLEncode(auth.Password)
-	payload := fmt.Sprintf("state=%s&username=%s&password=%s&action=default", state, emailURLEncoded, passwordURLEncoded)
+	payload := fmt.Sprintf("state=%s&username=%s&password=%s", state, emailURLEncoded, passwordURLEncoded)
 
 	headers := map[string]string{
 		"Host":            "auth0.openai.com",
 		"Origin":          "https://auth0.openai.com",
 		"Connection":      "keep-alive",
-		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 		"User-Agent":      auth.UserAgent,
 		"Referer":         fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state),
 		"Accept-Language": "en-US,en;q=0.9",
@@ -316,14 +315,16 @@ func (auth *Authenticator) partFour(state string) *Error {
 		return NewError("part_four", 0, "Failed to send request", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == 302 {
 		redirectURL := resp.Header.Get("Location")
+		println(redirectURL)
 		return auth.partFive(state, redirectURL)
 	} else {
-		body := bytes.NewBuffer(nil)
-		body.ReadFrom(resp.Body)
-		return NewError("part_four", resp.StatusCode, body.String(), fmt.Errorf("error: Check details"))
+		var body interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return NewError("part_four", 0, "", err)
+		}
+		return NewError("part_four", resp.StatusCode, body.(string), fmt.Errorf("error: Check details"))
 
 	}
 

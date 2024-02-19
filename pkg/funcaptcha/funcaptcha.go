@@ -82,7 +82,7 @@ func WithClient(client *tls_client.HttpClient) solverArg {
 func WithHarData(harData HARData) solverArg {
 	return func(s *Solver) {
 		for _, v := range harData.Log.Entries {
-			if strings.HasPrefix(v.Request.URL, arkPreURL) {
+			if strings.HasPrefix(v.Request.URL, arkPreURL) || strings.HasPrefix(v.Request.URL, arkAuthPreURL) {
 				var tmpArk arkReq
 				tmpArk.arkURL = v.Request.URL
 				if v.StartedDateTime == "" {
@@ -111,7 +111,6 @@ func WithHarData(harData HARData) solverArg {
 				var arkType string
 				tmpArk.arkBody = make(url.Values)
 				for _, p := range v.Request.PostData.Params {
-					// arkBody except bda & rnd
 					if p.Name == "bda" {
 						cipher, err := url.QueryUnescape(p.Value)
 						if err != nil {

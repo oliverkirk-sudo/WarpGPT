@@ -16,6 +16,7 @@ import (
 )
 
 const arkPreURL = "https://tcr9i.chat.openai.com/fc/gt2/"
+const arkAuthPreURL = "https://tcr9i.openai.com/fc/gt2/"
 
 var arkURLIns, _ = url.Parse(arkPreURL)
 
@@ -46,12 +47,12 @@ type request struct {
 	PostData postBody `json:"postData,omitempty"`
 	Cookies  []cookie `json:"cookies,omitempty"`
 }
-type entry struct {
+type entries struct {
 	StartedDateTime string  `json:"startedDateTime"`
 	Request         request `json:"request"`
 }
 type logData struct {
-	Entries []entry `json:"entries"`
+	Entries []entries `json:"entries"`
 }
 type HARData struct {
 	Log logData `json:"log"`
@@ -69,7 +70,7 @@ func (s *Solver) GetOpenAITokenWithBx(version arkVer, bx string, puid string) (s
 
 func (s *Solver) sendRequest(arkType arkVer, bda string, puid string) (string, error) {
 	if len(s.arks[arkType]) == 0 {
-		return "", errors.New("a valid HAR file with arkType " + string(arkType) + " required")
+		return "", errors.New("a valid HAR file with arkType " + strconv.Itoa(int(arkType)) + " required")
 	}
 	var tmpArk *arkReq = &s.arks[arkType][0]
 	s.arks[arkType] = append(s.arks[arkType][1:], s.arks[arkType][0])
