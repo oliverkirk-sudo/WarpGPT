@@ -53,8 +53,11 @@ func (p *BackendProcess) SetContext(conversation Context) {
 func (p *BackendProcess) ProcessMethod() {
 	context.Logger.Debug("ProcessBackendProcess")
 	var requestBody map[string]interface{}
+	var ws *wsstostream.WssToStream
 	err := p.decodeRequestBody(&requestBody)
 	if err != nil {
+		p.GetContext().GinContext.JSON(500, gin.H{"error": "Request json decode error"})
+		context.Logger.Error(err)
 		return
 	}
 	request, err := p.createRequest(requestBody)
@@ -63,9 +66,12 @@ func (p *BackendProcess) ProcessMethod() {
 		context.Logger.Error(err)
 		return
 	}
-	ws := wsstostream.NewWssToStream(p.GetContext().RequestHeaders.Get("Authorization"))
-	err = ws.InitConnect()
+	if strings.Contains(p.Context.RequestParam, "/conversation/ws") {
+		ws = wsstostream.NewWssToStream(p.GetContext().RequestHeaders.Get("Authorization"))
+		err = ws.InitConnect()
+	}
 	if err != nil {
+		p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 		context.Logger.Error(err)
 		return
 	}
@@ -89,17 +95,19 @@ func (p *BackendProcess) ProcessMethod() {
 	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
 		err = p.streamResponse(response)
 		if err != nil {
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			context.Logger.Error(err)
 			return
 		}
 	}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") {
-		if p.Context.RequestParam == "/conversation/ws" {
+		if strings.Contains(p.Context.RequestParam, "/conversation/ws") {
 			context.Logger.Debug("WsToStreamResponse")
 			p.WsToStreamResponse(ws, response)
 		} else {
 			err = p.jsonResponse(response)
 			if err != nil {
+				p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 				context.Logger.Error(err)
 				return
 			}

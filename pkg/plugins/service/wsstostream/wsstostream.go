@@ -58,43 +58,17 @@ func NewWssToStream(accessToken string) *WssToStream {
 
 func GetRegisterWebsocket(accessToken string) (*RegisterWebsocket, error) {
 	logger.Log.Debug("GetRegisterWebsocket")
-	url := "https://" + env.Env.OpenaiHost + "/backend-api/register-websocket"
-	req, err := http.NewRequest(http.MethodPost, url, nil)
-	if err != nil {
-		logger.Log.Error("Error creating request:", err)
-		return nil, err
-	}
-	headers := map[string]string{
-		"Host":          env.Env.OpenaiHost,
-		"Origin":        "https://" + env.Env.OpenaiHost,
-		"Authorization": accessToken,
-		"Connection":    "keep-alive",
-		"User-Agent":    env.Env.UserAgent,
-		"Referer":       "https://" + env.Env.OpenaiHost,
-	}
-
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-	resp, err := common.GetHttpClient().Do(req)
-	if err != nil {
-		logger.Log.Error("Error sending request:", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var WS RegisterWebsocket
-	readAll, err := io.ReadAll(resp.Body)
+	WS, err := common.RequestOpenAI[RegisterWebsocket]("/backend-api/register-websocket", nil, accessToken, http.MethodPost)
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(readAll, &WS)
 	if err != nil {
 		logger.Log.Error("Error decoding response:", err)
 		return nil, err
 	}
 	if WS.WssUrl != "" {
 		logger.Log.Debug("GetRegisterWebsocket Success WssUrl:", WS.WssUrl)
-		return &WS, nil
+		return WS, nil
 	} else {
 		return nil, errors.New("check your access_key")
 	}

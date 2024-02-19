@@ -4,6 +4,7 @@ import (
 	"WarpGPT/pkg/env"
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/plugins/service/proxypool"
+	"encoding/json"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -57,4 +58,37 @@ func GetHttpClient() tls_client.HttpClient {
 	}
 	client, _ := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	return client
+}
+
+func RequestOpenAI[T any](path string, body io.Reader, accessToken string, requestMethod string) (*T, error) {
+	url := "https://" + env.Env.OpenaiHost + path
+	req, err := http.NewRequest(requestMethod, url, body)
+	if err != nil {
+		logger.Log.Error("Error creating request:", err)
+		return nil, err
+	}
+	headers := map[string]string{
+		"Host":          env.Env.OpenaiHost,
+		"Origin":        "https://" + env.Env.OpenaiHost,
+		"Authorization": accessToken,
+		"Connection":    "keep-alive",
+		"User-Agent":    env.Env.UserAgent,
+		"Referer":       "https://" + env.Env.OpenaiHost,
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := GetHttpClient().Do(req)
+	if err != nil {
+		logger.Log.Error("Error sending request:", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var data T
+	readAll, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(readAll, &data)
+	return &data, nil
 }
