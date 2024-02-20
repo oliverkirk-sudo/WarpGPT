@@ -8,7 +8,7 @@
 端口列表
 ```
 /backend-api/* (前端逆向接口)
-/backend-api/backend-api/conversation/ws (前端WS逆向为原数据流格式)
+/backend-api/conversation/ws (前端WS逆向为原数据流格式)
 /api/* (前端逆向接口)
 /public-api/* (前端逆向接口)
 /v1/* (官方api代理)
