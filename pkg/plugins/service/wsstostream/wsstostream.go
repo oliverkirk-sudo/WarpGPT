@@ -75,25 +75,30 @@ func GetRegisterWebsocket(accessToken string) (*RegisterWebsocket, error) {
 }
 func (s *WssToStream) InitConnect() error {
 	logger.Log.Debug("Try Connect To WS")
-	proxyAddr, err := url.Parse(env.Env.Proxy)
-	if err != nil {
-		logger.Log.Error("Error parsing proxy URL:", err)
-		return err
-	}
 	var dialer websocket.Dialer
-	switch proxyAddr.Scheme {
-	case "http", "https":
-		dialer.Proxy = shttp.ProxyURL(proxyAddr)
-	case "socks5":
-		socksDialer, err := proxy.FromURL(proxyAddr, proxy.Direct)
+
+	// 当 env.Env.Proxy 不为空字符串时，才配置代理
+	if env.Env.Proxy != "" {
+		proxyAddr, err := url.Parse(env.Env.Proxy)
 		if err != nil {
-			logger.Log.Error("Error creating SOCKS proxy dialer:", err)
+			logger.Log.Error("Error parsing proxy URL:", err)
 			return err
 		}
-		dialer.NetDial = socksDialer.Dial
-	default:
-		logger.Log.Error("Unsupported proxy scheme:", proxyAddr.Scheme)
-		return errors.New("unsupported proxy scheme")
+
+		switch proxyAddr.Scheme {
+		case "http", "https":
+			dialer.Proxy = shttp.ProxyURL(proxyAddr)
+		case "socks5":
+			socksDialer, err := proxy.FromURL(proxyAddr, proxy.Direct)
+			if err != nil {
+				logger.Log.Error("Error creating SOCKS proxy dialer:", err)
+				return err
+			}
+			dialer.NetDial = socksDialer.Dial
+		default:
+			logger.Log.Error("Unsupported proxy scheme:", proxyAddr.Scheme)
+			return errors.New("unsupported proxy scheme")
+		}
 	}
 
 	headers := http.Header{}

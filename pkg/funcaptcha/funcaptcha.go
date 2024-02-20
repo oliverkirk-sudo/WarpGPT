@@ -18,6 +18,7 @@ type arkVer int
 
 const (
 	ArkVerAuth  arkVer = 0
+	ArkVerReg   arkVer = 1
 	ArkVerChat3 arkVer = 3
 	ArkVerChat4 arkVer = 4
 )
@@ -133,6 +134,9 @@ func WithHarData(harData HARData) solverArg {
 							} else if query == "35536E1E-65B4-4D96-9D97-6ADB7EFF8147" {
 								arkType = "chat4"
 								s.arks[ArkVerChat4] = append(s.arks[ArkVerChat4], tmpArk)
+							} else if query == "0655BC92-82E1-43D9-B32E-9DF9B01AF50C" {
+								arkType = "reg"
+								s.arks[ArkVerReg] = append(s.arks[ArkVerReg], tmpArk)
 							}
 						}
 					}
