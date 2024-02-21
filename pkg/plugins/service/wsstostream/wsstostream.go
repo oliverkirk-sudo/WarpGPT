@@ -115,14 +115,15 @@ func (s *WssToStream) InitConnect() error {
 		tools.AllCache.CacheSet(s.AccessToken, registerWebsocket)
 		s.WS = registerWebsocket
 	} else {
-		s.WS = item.(*RegisterWebsocket)
-		if s.WS.ExpiresAt.After(time.Now()) {
+		if s.WS.ExpiresAt.Before(time.Now()) {
 			registerWebsocket, err := GetRegisterWebsocket(s.AccessToken)
 			if err != nil {
 				return err
 			}
 			tools.AllCache.CacheSet(s.AccessToken, registerWebsocket)
 			s.WS = registerWebsocket
+		} else {
+			s.WS = item.(*RegisterWebsocket)
 		}
 	}
 
