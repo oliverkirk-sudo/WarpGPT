@@ -107,7 +107,7 @@ func (s *WssToStream) InitConnect() error {
 	headers.Set("User-Agent", env.Env.UserAgent)
 
 	item, exist := tools.AllCache.CacheGet(s.AccessToken)
-	if !exist {
+	if !exist || item.(*RegisterWebsocket).ExpiresAt.Before(time.Now()) {
 		registerWebsocket, err := GetRegisterWebsocket(s.AccessToken)
 		if err != nil {
 			return err
@@ -116,14 +116,6 @@ func (s *WssToStream) InitConnect() error {
 		s.WS = registerWebsocket
 	} else {
 		s.WS = item.(*RegisterWebsocket)
-		if s.WS.ExpiresAt.After(time.Now()) {
-			registerWebsocket, err := GetRegisterWebsocket(s.AccessToken)
-			if err != nil {
-				return err
-			}
-			tools.AllCache.CacheSet(s.AccessToken, registerWebsocket)
-			s.WS = registerWebsocket
-		}
 	}
 
 	c, _, err := dialer.Dial(s.WS.WssUrl, shttp.Header(headers))
