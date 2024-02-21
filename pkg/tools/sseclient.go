@@ -33,7 +33,7 @@ func (c *SSEClient) Read() <-chan Event {
 	events := make(chan Event)
 	go func() {
 		defer close(events)
-		reader := bufio.NewReader(c.EventSource)
+		reader := bufio.NewReaderSize(c.EventSource, 128*1024)
 		var data bytes.Buffer
 
 		for {
