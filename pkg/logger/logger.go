@@ -10,7 +10,7 @@ var Log *logrus.Logger
 
 func init() {
 	Log = logrus.New()
-	level, err := logrus.ParseLevel(env.Env.LogLevel)
+	level, err := logrus.ParseLevel(env.E.LogLevel)
 	if err != nil {
 		return
 	}

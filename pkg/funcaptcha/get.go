@@ -9,7 +9,7 @@ import (
 func GetOpenAIArkoseToken(arkType int, puid string) (string, error) {
 	logger.Log.Debug("GetArkoseToken")
 	var proxyArg solverArg
-	if env.Env.ProxyPoolUrl != "" {
+	if env.E.ProxyPoolUrl != "" {
 		ip, err := proxypool.ProxyPoolInstance.GetIpInRedis()
 		if err != nil {
 			logger.Log.Warning(err.Error())
@@ -17,7 +17,7 @@ func GetOpenAIArkoseToken(arkType int, puid string) (string, error) {
 		}
 		proxyArg = WithProxy(ip)
 	} else {
-		proxyArg = WithProxy(env.Env.Proxy)
+		proxyArg = WithProxy(env.E.Proxy)
 	}
 
 	solver := NewSolver(proxyArg)

@@ -77,9 +77,9 @@ func (s *WssToStream) InitConnect() error {
 	logger.Log.Debug("Try Connect To WS")
 	var dialer websocket.Dialer
 
-	// 当 env.Env.Proxy 不为空字符串时，才配置代理
-	if env.Env.Proxy != "" {
-		proxyAddr, err := url.Parse(env.Env.Proxy)
+	// 当 env.E.Proxy 不为空字符串时，才配置代理
+	if env.E.Proxy != "" {
+		proxyAddr, err := url.Parse(env.E.Proxy)
 		if err != nil {
 			logger.Log.Error("Error parsing proxy URL:", err)
 			return err
@@ -102,9 +102,9 @@ func (s *WssToStream) InitConnect() error {
 	}
 
 	headers := http.Header{}
-	headers.Set("Origin", "https://"+env.Env.OpenaiHost)
+	headers.Set("Origin", "https://"+env.E.OpenaiHost)
 	headers.Set("Sec-WebSocket-Protocol", "json.reliable.webpubsub.azure.v1")
-	headers.Set("User-Agent", env.Env.UserAgent)
+	headers.Set("User-Agent", env.E.UserAgent)
 
 	item, exist := tools.AllCache.CacheGet(s.AccessToken)
 	if !exist || item.(*RegisterWebsocket).ExpiresAt.Before(time.Now()) {

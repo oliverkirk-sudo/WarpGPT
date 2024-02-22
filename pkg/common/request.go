@@ -10,6 +10,7 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/gin-gonic/gin"
 	"io"
+	shttp "net/http"
 )
 
 type Context struct {
@@ -46,7 +47,7 @@ func GetHttpClient() tls_client.HttpClient {
 		tls_client.WithCookieJar(jar),
 		tls_client.WithRandomTLSExtensionOrder(),
 	}
-	if env.Env.ProxyPoolUrl != "" {
+	if env.E.ProxyPoolUrl != "" {
 		ip, err := proxypool.ProxyPoolInstance.GetIpInRedis()
 		if err != nil {
 			logger.Log.Warning(err.Error())
@@ -54,26 +55,26 @@ func GetHttpClient() tls_client.HttpClient {
 		}
 		options = append(options, tls_client.WithProxyUrl(ip))
 	} else {
-		options = append(options, tls_client.WithProxyUrl(env.Env.Proxy))
+		options = append(options, tls_client.WithProxyUrl(env.E.Proxy))
 	}
 	client, _ := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	return client
 }
 
 func RequestOpenAI[T any](path string, body io.Reader, accessToken string, requestMethod string) (*T, error) {
-	url := "https://" + env.Env.OpenaiHost + path
+	url := "https://" + env.E.OpenaiHost + path
 	req, err := http.NewRequest(requestMethod, url, body)
 	if err != nil {
 		logger.Log.Error("Error creating request:", err)
 		return nil, err
 	}
 	headers := map[string]string{
-		"Host":          env.Env.OpenaiHost,
-		"Origin":        "https://" + env.Env.OpenaiHost,
+		"Host":          env.E.OpenaiHost,
+		"Origin":        "https://" + env.E.OpenaiHost,
 		"Authorization": accessToken,
 		"Connection":    "keep-alive",
-		"User-Agent":    env.Env.UserAgent,
-		"Referer":       "https://" + env.Env.OpenaiHost,
+		"User-Agent":    env.E.UserAgent,
+		"Referer":       "https://" + env.E.OpenaiHost,
 	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
@@ -84,6 +85,9 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.Body == shttp.NoBody {
+		return nil, nil
+	}
 	var data T
 	readAll, err := io.ReadAll(resp.Body)
 	if err != nil {

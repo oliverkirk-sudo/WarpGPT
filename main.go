@@ -37,7 +37,7 @@ func CORSMiddleware() gin.HandlerFunc {
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("AuthKey")
-		if apiKey != env.Env.AuthKey {
+		if apiKey != env.E.AuthKey {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -46,7 +46,7 @@ func AuthMiddleware() gin.HandlerFunc {
 }
 func main() {
 	var router = gin.Default()
-	if env.Env.Verify {
+	if env.E.Verify {
 		router.Use(AuthMiddleware())
 	}
 	router.Use(CORSMiddleware())
@@ -56,7 +56,7 @@ func main() {
 			GetRedisClient: db.GetRedisClient,
 		},
 		Logger: logger.Log,
-		Env:    &env.Env,
+		Env:    &env.E,
 		Auth:   funcaptcha.GetOpenAIArkoseToken,
 	}
 	var plugin_list []plugins.Plugin
@@ -74,5 +74,5 @@ func main() {
 	for _, plugin := range plugin_list {
 		plugin.Run(component)
 	}
-	router.Run(env.Env.Host + ":" + strconv.Itoa(env.Env.Port))
+	router.Run(env.E.Host + ":" + strconv.Itoa(env.E.Port))
 }

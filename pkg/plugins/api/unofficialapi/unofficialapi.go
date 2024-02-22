@@ -14,7 +14,6 @@ import (
 	"github.com/pkoukk/tiktoken-go"
 	"io"
 	shttp "net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -377,25 +376,11 @@ func (p *UnofficialApiProcess) jsonImageProcess(stream string) {
 func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePointer, result *Result) error {
 	context.Logger.Debug("getImageUrlByPointer")
 	for _, v := range *imagePointerList {
-		imageDownloadUrl := new(ImageDownloadUrl)
-		getUrl := "http://" + context.Env.Host + ":" + strconv.Itoa(context.Env.Port) + "/backend-api/files/" + v.Pointer + "/download"
-		context.Logger.Debug("image url is " + getUrl)
-		request, err := http.NewRequest("GET", getUrl, nil)
+		imageDownloadUrl, err := common.RequestOpenAI[ImageDownloadUrl]("/backend-api/files/"+v.Pointer+"/download", nil, "GET", p.GetContext().RequestHeaders.Get("Authorization"))
 		if err != nil {
 			return err
 		}
-		request.Header.Set("Authorization", p.GetContext().RequestHeaders.Get("Authorization"))
-		response, err := (&http.Client{}).Do(request)
-		if err != nil {
-			return err
-		}
-		if response.Body != shttp.NoBody {
-			err = json.NewDecoder(response.Body).Decode(&imageDownloadUrl)
-			if err != nil {
-				return err
-			}
-		}
-		if imageDownloadUrl.DownloadUrl != "" {
+		if imageDownloadUrl != nil && imageDownloadUrl.DownloadUrl != "" {
 			context.Logger.Debug("getDownloadUrl")
 			imageItem := new(ApiImageItem)
 			result.ApiImageGenerationRespStr.Created = time.Now().Unix()
@@ -403,7 +388,6 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 			imageItem.RevisedPrompt = v.Prompt
 			result.ApiImageGenerationRespStr.Data = append(result.ApiImageGenerationRespStr.Data, *imageItem)
 		}
-		response.Body.Close()
 	}
 	return nil
 }

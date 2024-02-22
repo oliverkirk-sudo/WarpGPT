@@ -27,7 +27,7 @@ type ENV struct {
 	CapClientID     string
 }
 
-var Env ENV
+var E ENV
 var EnvFile string
 
 func init() {
@@ -70,7 +70,7 @@ func init() {
 	if err != nil && proxyPoolUrl != "" {
 		panic("DB填写出现问题")
 	}
-	Env = ENV{
+	E = ENV{
 		Proxy:           os.Getenv("proxy"),
 		Port:            port,
 		Host:            os.Getenv("host"),

@@ -80,7 +80,7 @@ func NewAuthenticator(emailAddress, password string, puid string) *Authenticator
 		tls_client.WithClientProfile(profiles.Chrome_109),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
-		tls_client.WithProxyUrl(env.Env.Proxy),
+		tls_client.WithProxyUrl(env.E.Proxy),
 	}
 	auth.Session, _ = tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	return auth
@@ -93,18 +93,18 @@ func (auth *Authenticator) URLEncode(str string) string {
 func (auth *Authenticator) Begin() *Error {
 	logger.Log.Debug("Auth Begin")
 
-	target := "https://" + env.Env.OpenaiHost + "/api/auth/csrf"
+	target := "https://" + env.E.OpenaiHost + "/api/auth/csrf"
 	req, err := http.NewRequest("GET", target, nil)
 	if err != nil {
 		return NewError("begin", 0, "", err)
 	}
 
-	req.Header.Set("Host", ""+env.Env.OpenaiHost+"")
+	req.Header.Set("Host", ""+env.E.OpenaiHost+"")
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("User-Agent", auth.UserAgent)
 	req.Header.Set("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8")
-	req.Header.Set("Referer", "https://"+env.Env.OpenaiHost+"/auth/login")
+	req.Header.Set("Referer", "https://"+env.E.OpenaiHost+"/auth/login")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 
 	resp, err := auth.Session.Do(req)
@@ -139,19 +139,19 @@ func (auth *Authenticator) Begin() *Error {
 func (auth *Authenticator) partOne(csrfToken string) *Error {
 	logger.Log.Debug("Auth One")
 
-	auth_url := "https://" + env.Env.OpenaiHost + "/api/auth/signin/auth0?prompt=login"
+	auth_url := "https://" + env.E.OpenaiHost + "/api/auth/signin/auth0?prompt=login"
 	headers := map[string]string{
-		"Host":            "" + env.Env.OpenaiHost + "",
+		"Host":            "" + env.E.OpenaiHost + "",
 		"User-Agent":      auth.UserAgent,
 		"Content-Type":    "application/x-www-form-urlencoded",
 		"Accept":          "*/*",
 		"Sec-Gpc":         "1",
 		"Accept-Language": "en-US,en;q=0.8",
-		"Origin":          "https://" + env.Env.OpenaiHost + "",
+		"Origin":          "https://" + env.E.OpenaiHost + "",
 		"Sec-Fetch-Site":  "same-origin",
 		"Sec-Fetch-Mode":  "cors",
 		"Sec-Fetch-Dest":  "empty",
-		"Referer":         "https://" + env.Env.OpenaiHost + "/auth/login",
+		"Referer":         "https://" + env.E.OpenaiHost + "/auth/login",
 		"Accept-Encoding": "gzip, deflate",
 	}
 
@@ -181,7 +181,7 @@ func (auth *Authenticator) partOne(csrfToken string) *Error {
 		if err != nil {
 			return NewError("part_one", 0, "Failed to decode JSON", err)
 		}
-		if urlResponse.URL == "https://"+env.Env.OpenaiHost+"/api/auth/error?error=OAuthSignin" || strings.Contains(urlResponse.URL, "error") {
+		if urlResponse.URL == "https://"+env.E.OpenaiHost+"/api/auth/error?error=OAuthSignin" || strings.Contains(urlResponse.URL, "error") {
 			err := NewError("part_one", resp.StatusCode, "You have been rate limited. Please try again later.", fmt.Errorf("error: Check details"))
 			return err
 		}
@@ -367,7 +367,7 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 	logger.Log.Debug("Auth Six")
 	req, _ := http.NewRequest("GET", urls, nil)
 	for k, v := range map[string]string{
-		"Host":            "" + env.Env.OpenaiHost + "",
+		"Host":            "" + env.E.OpenaiHost + "",
 		"Accept":          "application/json",
 		"Connection":      "keep-alive",
 		"User-Agent":      auth.UserAgent,
@@ -388,11 +388,11 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 		return NewError("part_six", resp.StatusCode, urls, fmt.Errorf("incorrect response code"))
 	}
 	// Check location header
-	if location := resp.Header.Get("Location"); location != "https://"+env.Env.OpenaiHost+"/" {
+	if location := resp.Header.Get("Location"); location != "https://"+env.E.OpenaiHost+"/" {
 		return NewError("part_six", resp.StatusCode, location, fmt.Errorf("incorrect redirect"))
 	}
 
-	sessionUrl := "https://" + env.Env.OpenaiHost + "/api/auth/session"
+	sessionUrl := "https://" + env.E.OpenaiHost + "/api/auth/session"
 
 	req, _ = http.NewRequest("GET", sessionUrl, nil)
 
@@ -417,7 +417,7 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 		resultString := fmt.Sprintf("%v", result)
 		return NewError("part_six", 0, resultString, fmt.Errorf("missing access token"))
 	}
-	cookieUrl, _ := url.Parse("https://" + env.Env.OpenaiHost + "")
+	cookieUrl, _ := url.Parse("https://" + env.E.OpenaiHost + "")
 	jar := auth.Session.GetCookies(cookieUrl)
 	auth.AuthResult.AccessToken = result
 	for _, cookie := range jar {
@@ -431,7 +431,7 @@ func (auth *Authenticator) partSix(urls, redirect_url string) *Error {
 
 func (auth *Authenticator) GetAccessTokenByRefreshToken(freshToken string) *Error {
 	logger.Log.Debug("GetAccessTokenByRefreshToken")
-	sessionUrl := "https://" + env.Env.OpenaiHost + "/api/auth/session"
+	sessionUrl := "https://" + env.E.OpenaiHost + "/api/auth/session"
 
 	req, _ := http.NewRequest("GET", sessionUrl, nil)
 	cookies := &http.Cookie{
@@ -461,7 +461,7 @@ func (auth *Authenticator) GetAccessTokenByRefreshToken(freshToken string) *Erro
 		resultString := fmt.Sprintf("%v", result)
 		return NewError("GetAccessTokenByRefreshToken", 0, resultString, fmt.Errorf("missing access token"))
 	}
-	cookieUrl, _ := url.Parse("https://" + env.Env.OpenaiHost + "")
+	cookieUrl, _ := url.Parse("https://" + env.E.OpenaiHost + "")
 	jar := auth.Session.GetCookies(cookieUrl)
 	auth.AuthResult.AccessToken = result
 	for _, cookie := range jar {
@@ -486,15 +486,15 @@ func (auth *Authenticator) GetModels() (map[string]interface{}, *Error) {
 	if len(auth.AuthResult.AccessToken) == 0 {
 		return nil, NewError("get_model", 0, "Missing access token", fmt.Errorf("error: Check details"))
 	}
-	// Make request to https://"+common.Env.OpenAI_HOST+"/backend-api/models
-	req, _ := http.NewRequest("GET", "https://"+env.Env.OpenaiHost+"/backend-api/models", nil)
+	// Make request to https://"+common.E.OpenAI_HOST+"/backend-api/models
+	req, _ := http.NewRequest("GET", "https://"+env.E.OpenaiHost+"/backend-api/models", nil)
 	// Add headers
 	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken["accessToken"].(string))
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://"+env.Env.OpenaiHost+"/")
-	req.Header.Add("Origin", "https://"+env.Env.OpenaiHost+"")
+	req.Header.Add("Referer", "https://"+env.E.OpenaiHost+"/")
+	req.Header.Add("Origin", "https://"+env.E.OpenaiHost+"")
 	req.Header.Add("Connection", "keep-alive")
 
 	resp, err := auth.Session.Do(req)
@@ -523,15 +523,15 @@ func (auth *Authenticator) GetPUID() (string, *Error) {
 	if len(auth.AuthResult.AccessToken) == 0 {
 		return "", NewError("get_puid", 0, "Missing access token", fmt.Errorf("error: Check details"))
 	}
-	// Make request to https://"+common.Env.OpenAI_HOST+"/backend-api/models
-	req, _ := http.NewRequest("GET", "https://"+env.Env.OpenaiHost+"/backend-api/models", nil)
+	// Make request to https://"+common.E.OpenAI_HOST+"/backend-api/models
+	req, _ := http.NewRequest("GET", "https://"+env.E.OpenaiHost+"/backend-api/models", nil)
 	// Add headers
 	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken["accessToken"].(string))
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Add("Referer", "https://"+env.Env.OpenaiHost+"/")
-	req.Header.Add("Origin", "https://"+env.Env.OpenaiHost+"")
+	req.Header.Add("Referer", "https://"+env.E.OpenaiHost+"/")
+	req.Header.Add("Origin", "https://"+env.E.OpenaiHost+"")
 	req.Header.Add("Connection", "keep-alive")
 
 	resp, err := auth.Session.Do(req)
