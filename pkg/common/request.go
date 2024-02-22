@@ -10,7 +10,6 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/gin-gonic/gin"
 	"io"
-	shttp "net/http"
 )
 
 type Context struct {
@@ -85,11 +84,11 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.Body == shttp.NoBody {
-		return nil, nil
-	}
 	var data T
 	readAll, err := io.ReadAll(resp.Body)
+	if readAll == nil {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
