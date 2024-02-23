@@ -285,6 +285,7 @@ func (p *UnofficialApiProcess) addArkoseTokenIfNeeded(requestBody *map[string]in
 		token, err := funcaptcha.GetOpenAIArkoseToken(4, p.GetContext().RequestHeaders.Get("puid"))
 		if err != nil {
 			p.GetContext().GinContext.JSON(500, gin.H{"error": "Get ArkoseToken Failed"})
+			logger.Log.Error(err)
 			return "", err
 		}
 		(*requestBody)["arkose_token"] = token
@@ -317,7 +318,7 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *UnofficialApiProcess, a string) bool) error {
 	context.Logger.Debug("UnofficialApiProcess streamResponse")
 	var client *tools.SSEClient
-	if p.Context.RequestParam == "/chat/completions/ws" || p.Context.RequestParam == "/images/generations/ws" {
+	if strings.Contains(p.Context.RequestParam, "/ws") {
 		var jsonData WsResponse
 		err := json.NewDecoder(response.Body).Decode(&jsonData)
 		if err != nil {
@@ -522,7 +523,7 @@ func (u UnOfficialApiRequestUrl) Generate(path string, rawquery string) string {
 }
 func (p *UnofficialApiProcess) Run(com *plugins.Component) {
 	context = com
-	context.Engine.Any("/r/v1/*path", func(c *gin.Context) {
+	context.Engine.Any("/r/*path", func(c *gin.Context) {
 		conversation := common.GetContextPack(c, UnOfficialApiRequestUrl{})
 		common.Do[Context](new(UnofficialApiProcess), Context(conversation))
 	})
