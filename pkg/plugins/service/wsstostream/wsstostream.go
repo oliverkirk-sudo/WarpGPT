@@ -66,7 +66,7 @@ func GetRegisterWebsocket(accessToken string) (*RegisterWebsocket, error) {
 		logger.Log.Error("Error decoding response:", err)
 		return nil, err
 	}
-	if WS.WssUrl != "" {
+	if WS != nil && WS.WssUrl != "" {
 		logger.Log.Debug("GetRegisterWebsocket Success WssUrl:", WS.WssUrl)
 		return WS, nil
 	} else {

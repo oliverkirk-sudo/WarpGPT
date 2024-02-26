@@ -5,11 +5,14 @@ import (
 	"WarpGPT/pkg/logger"
 	"WarpGPT/pkg/plugins/service/proxypool"
 	"encoding/json"
+	browser "github.com/EDDYCJY/fake-useragent"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/gin-gonic/gin"
 	"io"
+	"math/rand"
+	"sync"
 )
 
 type Context struct {
@@ -21,6 +24,9 @@ type Context struct {
 	RequestMethod  string
 	RequestHeaders http.Header
 }
+
+var tu sync.Mutex
+
 type RequestUrl interface {
 	Generate(path string, rawquery string) string
 }
@@ -36,12 +42,25 @@ func GetContextPack[T RequestUrl](ctx *gin.Context, reqUrl T) Context {
 	conversation.RequestHeaders = http.Header(ctx.Request.Header)
 	return conversation
 }
+func setUserAgent() {
+	tu.Lock()
+	env.E.UserAgent = browser.Safari()
+	tu.Unlock()
+}
 
 func GetHttpClient() tls_client.HttpClient {
 	jar := tls_client.NewCookieJar()
+	userAgent := map[int]profiles.ClientProfile{
+		1: profiles.Safari_15_6_1,
+		2: profiles.Safari_16_0,
+		3: profiles.Safari_IOS_15_5,
+		4: profiles.Safari_IOS_15_6,
+		5: profiles.Safari_IOS_16_0,
+	}
+	go setUserAgent()
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(120),
-		tls_client.WithClientProfile(profiles.Safari_15_6_1),
+		tls_client.WithClientProfile(userAgent[rand.Intn(6)]),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 		tls_client.WithRandomTLSExtensionOrder(),
