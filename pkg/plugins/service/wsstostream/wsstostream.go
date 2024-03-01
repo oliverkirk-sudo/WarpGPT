@@ -59,9 +59,7 @@ func NewWssToStream(accessToken string) *WssToStream {
 func GetRegisterWebsocket(accessToken string) (*RegisterWebsocket, error) {
 	logger.Log.Debug("GetRegisterWebsocket")
 	WS, err := common.RequestOpenAI[RegisterWebsocket]("/backend-api/register-websocket", nil, accessToken, http.MethodPost)
-	if err != nil {
-		return nil, err
-	}
+
 	if err != nil {
 		logger.Log.Error("Error decoding response:", err)
 		return nil, err
@@ -70,6 +68,7 @@ func GetRegisterWebsocket(accessToken string) (*RegisterWebsocket, error) {
 		logger.Log.Debug("GetRegisterWebsocket Success WssUrl:", WS.WssUrl)
 		return WS, nil
 	} else {
+		logger.Log.Debug("accessToken:", accessToken)
 		return nil, errors.New("check your access_key")
 	}
 }
@@ -106,16 +105,16 @@ func (s *WssToStream) InitConnect() error {
 	headers.Set("Sec-WebSocket-Protocol", "json.reliable.webpubsub.azure.v1")
 	headers.Set("User-Agent", env.E.UserAgent)
 
-	item, exist := tools.AllCache.CacheGet(s.AccessToken)
-	if !exist || item.(*RegisterWebsocket).ExpiresAt.Before(time.Now()) {
+	item, exists := tools.AllCache.CacheGet(s.AccessToken)
+	if !exists || item.ExpiresAt.Before(time.Now()) {
 		registerWebsocket, err := GetRegisterWebsocket(s.AccessToken)
 		if err != nil {
 			return err
 		}
-		tools.AllCache.CacheSet(s.AccessToken, registerWebsocket)
+		tools.AllCache.CacheSet(s.AccessToken, tools.CacheItem{Data: registerWebsocket}, 55*time.Minute)
 		s.WS = registerWebsocket
 	} else {
-		s.WS = item.(*RegisterWebsocket)
+		s.WS = item.Data.(*RegisterWebsocket)
 	}
 
 	c, _, err := dialer.Dial(s.WS.WssUrl, shttp.Header(headers))
