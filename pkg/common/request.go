@@ -52,10 +52,10 @@ func GetContextPack[T RequestUrl](ctx *gin.Context, reqUrl T) Context {
 	conversation.RequestHeaders = http.Header(ctx.Request.Header)
 	return conversation
 }
-func setUserAgent() {
-	tu.Lock()
-	env.E.UserAgent = browser.Safari()
-	tu.Unlock()
+func getUserAgent() string {
+    tu.Lock()
+    defer tu.Unlock()
+    return browser.Safari()
 }
 
 func GetHttpClient() tls_client.HttpClient {
@@ -67,10 +67,10 @@ func GetHttpClient() tls_client.HttpClient {
 		4: profiles.Safari_IOS_15_6,
 		5: profiles.Safari_IOS_16_0,
 	}
-	go setUserAgent()
+
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(120),
-		tls_client.WithClientProfile(userAgent[rand.Intn(6)]),
+		tls_client.WithClientProfile(userAgent[rand.Intn(5)+1]),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 		tls_client.WithRandomTLSExtensionOrder(),
@@ -85,7 +85,11 @@ func GetHttpClient() tls_client.HttpClient {
 	} else {
 		options = append(options, tls_client.WithProxyUrl(env.E.Proxy))
 	}
-	client, _ := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+    	if err != nil {
+	    logger.Log.Error("Error creating http client:", err)
+            return nil
+        }
 	return client
 }
 
@@ -96,12 +100,13 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 		logger.Log.Error("Error creating request:", err)
 		return nil, err
 	}
+	userAgentStr := getUserAgent()
 	headers := map[string]string{
 		"Host":          	env.E.OpenaiHost,
 		"Origin":        	"https://" + env.E.OpenaiHost,
 		"Authorization": 	accessToken,
 		"Connection":    	"keep-alive",
-		"User-Agent":    	env.E.UserAgent,
+		"User-Agent":    	userAgentStr,
 		"Referer":       	"https://" + env.E.OpenaiHost,
 		"Content-Type":  	"application/json",
 		"Accept":	 	"*/*",
@@ -126,12 +131,17 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 	}
 	var data T
 	readAll, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log.Error("Read error:", err)
+		return nil, err
+	}
 	if readAll == nil {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
 	err = json.Unmarshal(readAll, &data)
+    	if err != nil {
+            logger.Log.Error("Unmarshal error:", err)
+	    return nil, err
+        }
 	return &data, nil
 }
