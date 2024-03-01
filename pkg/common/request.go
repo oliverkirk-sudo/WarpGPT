@@ -11,6 +11,7 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/gin-gonic/gin"
 	"io"
+	"fmt"
 	"math/rand"
 	"sync"
 )
@@ -23,6 +24,15 @@ type Context struct {
 	RequestParam   string
 	RequestMethod  string
 	RequestHeaders http.Header
+}
+
+type APIError struct {
+	AccessToken string
+	StatusCode int
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("HTTP status %d, AccessToken: %s", e.StatusCode, e.AccessToken)
 }
 
 var tu sync.Mutex
@@ -87,12 +97,16 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 		return nil, err
 	}
 	headers := map[string]string{
-		"Host":          env.E.OpenaiHost,
-		"Origin":        "https://" + env.E.OpenaiHost,
-		"Authorization": accessToken,
-		"Connection":    "keep-alive",
-		"User-Agent":    env.E.UserAgent,
-		"Referer":       "https://" + env.E.OpenaiHost,
+		"Host":          	env.E.OpenaiHost,
+		"Origin":        	"https://" + env.E.OpenaiHost,
+		"Authorization": 	accessToken,
+		"Connection":    	"keep-alive",
+		"User-Agent":    	env.E.UserAgent,
+		"Referer":       	"https://" + env.E.OpenaiHost,
+		"Content-Type":  	"application/json",
+		"Accept":	 	"*/*",
+		"sec-fetch-dest":	"empty",
+		"sec-fetch-site":	"same-origin",
 	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
@@ -103,6 +117,13 @@ func RequestOpenAI[T any](path string, body io.Reader, accessToken string, reque
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		apiError := &APIError{
+			AccessToken: accessToken,
+			StatusCode: resp.StatusCode,
+		}
+		return nil, apiError
+	}
 	var data T
 	readAll, err := io.ReadAll(resp.Body)
 	if readAll == nil {
