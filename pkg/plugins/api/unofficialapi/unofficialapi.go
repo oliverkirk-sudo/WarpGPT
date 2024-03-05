@@ -76,27 +76,36 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 	var requestBody map[string]interface{}
 	err := p.decodeRequestBody(&requestBody)
 	if err != nil {
+		context.Logger.Error("decodeRequestBody error", err)
+		p.GetContext().GinContext.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	p.ID = IdGenerator()
-	_, exists := requestBody["model"]
-	if exists {
-		p.Model, _ = requestBody["model"].(string)
-	} else {
+	model, exists := requestBody["model"]
+	if !exists {
 		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
 		return
 	}
+	modelStr, ok := model.(string)
+	if !ok {
+		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model should be a string"})
+		return
+	}
+	p.Model = modelStr
+	
 	if strings.Contains(p.GetContext().RequestParam, "chat/completions") {
 		p.Mode = "chat"
 		if err = p.chatApiProcess(requestBody); err != nil {
-			logger.Log.Error(err)
+			context.Logger.Error("chatApiProcess error", err)
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 	}
 	if strings.Contains(p.GetContext().RequestParam, "images/generations") {
 		p.Mode = "image"
 		if err = p.imageApiProcess(requestBody); err != nil {
-			logger.Log.Error(err)
+			context.Logger.Error("chatApiProcess error", err)
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 	}
@@ -132,6 +141,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 	context.Logger.Debug("UnofficialApiProcess chatApiProcess")
 	response, err := p.MakeRequest(requestBody)
 	if err != nil {
+		context.Logger.Error("MakeRequest error:", err)
 		return err
 	}
 	value, exists := requestBody["stream"]
@@ -140,7 +150,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		err = p.response(response, func(p *UnofficialApiProcess, a string) bool {
 			data := p.streamChatProcess(a)
 			if _, err = p.GetContext().GinContext.Writer.Write([]byte(data)); err != nil {
-				context.Logger.Warning(err)
+				context.Logger.Warning("Error writing stream response:", err)
 				return true
 			}
 			p.GetContext().GinContext.Writer.Flush()
@@ -166,6 +176,7 @@ func (p *UnofficialApiProcess) chatApiProcess(requestBody map[string]interface{}
 		})
 
 		if err != nil {
+			context.Logger.Error("Error during response processing:", err)
 			return err
 		}
 	}
@@ -308,7 +319,7 @@ func (p *UnofficialApiProcess) streamChatProcess(raw string) string {
 	} else if result.ApiRespStrStream.Id != "" {
 		data, err := json.Marshal(result.ApiRespStrStream)
 		if err != nil {
-			context.Logger.Warning(err)
+			context.Logger.Warning("JSON Marshal error:", err)
 		}
 		return "data: " + string(data) + "\n\n"
 	}
@@ -335,6 +346,8 @@ func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *Uno
 	} else {
 		client = tools.NewSSEClient(response.Body)
 	}
+	defer client.Close()
+
 	events := client.Read()
 	for event := range events {
 		if event.Event == "message" {
@@ -343,7 +356,6 @@ func (p *UnofficialApiProcess) response(response *http.Response, mid func(p *Uno
 			}
 		}
 	}
-	defer client.Close()
 	return nil
 }
 
@@ -394,41 +406,42 @@ func (p *UnofficialApiProcess) getImageUrlByPointer(imagePointerList *[]ImagePoi
 }
 
 func (p *UnofficialApiProcess) getStreamResp(stream string) *Result {
-	context.Logger.Debug("getStreamResp")
-	var chatRespStr ChatRespStr
-	var chatEndRespStr ChatEndRespStr
-	result := new(Result)
-	result.ApiRespStrStreamEnd = ApiRespStrStreamEnd{}
-	result.ApiRespStrStream = ApiRespStrStream{}
-	result.Pass = false
-	json.Unmarshal([]byte(stream), &chatRespStr)
-	if chatRespStr.Message.Id != "" {
-		if chatRespStr.Message.Metadata.ParentId == "" {
-			result.Pass = true
-			return result
-		}
-		context.Logger.Debug("chatRespStr")
-		resp := GetApiRespStrStream(p.ID)
-		choice := GetStreamChoice()
-		resp.Model = p.Model
-		choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], p.OldString, "")
-		p.OldString = chatRespStr.Message.Content.Parts[0]
-		resp.Choices = resp.Choices[:0]
-		resp.Choices = append(resp.Choices, *choice)
-		result.ApiRespStrStream = *resp
-	}
-	json.Unmarshal([]byte(stream), &chatEndRespStr)
-	if chatEndRespStr.IsCompletion {
-		context.Logger.Debug("chatEndRespStr")
-		resp := GetApiRespStrStreamEnd(p.ID)
-		resp.Model = p.Model
-		result.ApiRespStrStreamEnd = *resp
-	}
-	if result.ApiRespStrStream.Id == "" && result.ApiRespStrStreamEnd.Id == "" {
-		result.Pass = true
-	}
-	return result
+    context.Logger.Debug("getStreamResp")
+    var chatRespStr ChatRespStr
+    var chatEndRespStr ChatEndRespStr
+    result := new(Result)
+    result.ApiRespStrStreamEnd = ApiRespStrStreamEnd{}
+    result.ApiRespStrStream = ApiRespStrStream{}
+    result.Pass = false
+
+    errRespStr := json.Unmarshal([]byte(stream), &chatRespStr)
+    if errRespStr == nil && chatRespStr.Message.Id != "" {
+        if chatRespStr.Message.Metadata.ParentId == "" {
+            result.Pass = true
+        } else {
+            resp := GetApiRespStrStream(p.ID)
+            choice := GetStreamChoice()
+            resp.Model = p.Model
+            choice.Delta.Content = strings.ReplaceAll(chatRespStr.Message.Content.Parts[0], p.OldString, "")
+            p.OldString = chatRespStr.Message.Content.Parts[0]
+            resp.Choices = resp.Choices[:0]
+            resp.Choices = append(resp.Choices, *choice)
+            result.ApiRespStrStream = *resp
+        }
+    } else {
+        errEndRespStr := json.Unmarshal([]byte(stream), &chatEndRespStr)
+        if errEndRespStr == nil && chatEndRespStr.IsCompletion {
+            resp := GetApiRespStrStreamEnd(p.ID)
+            resp.Model = p.Model
+            result.ApiRespStrStreamEnd = *resp
+        }
+    }
+    if result.ApiRespStrStream.Id == "" && result.ApiRespStrStreamEnd.Id == "" {
+        result.Pass = true
+    }
+    return result
 }
+
 func (p *UnofficialApiProcess) checkModel(model string) (string, error) {
 	context.Logger.Debug("UnofficialApiProcess checkModel")
 	if strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "gpt-4-vision") {
