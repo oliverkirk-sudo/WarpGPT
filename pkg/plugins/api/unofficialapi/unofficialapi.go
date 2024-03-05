@@ -81,40 +81,31 @@ func (p *UnofficialApiProcess) ProcessMethod() {
 		return
 	}
 	p.ID = IdGenerator()
-	//_, exists := requestBody["model"]
-	//if exists {
-	//	p.Model, _ = requestBody["model"].(string)
-	//} else {
-	//	p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
-	//	return
-	//}
 	model, exists := requestBody["model"]
-    if !exists {
-        p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
-        return
-    }
-    modelStr, ok := model.(string)
-    if !ok {
-        p.GetContext().GinContext.JSON(400, gin.H{"error": "Model should be a string"})
-        return
-    }
-    p.Model = modelStr
+	if !exists {
+		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model not provided"})
+		return
+	}
+	modelStr, ok := model.(string)
+	if !ok {
+		p.GetContext().GinContext.JSON(400, gin.H{"error": "Model should be a string"})
+		return
+	}
+	p.Model = modelStr
 	
 	if strings.Contains(p.GetContext().RequestParam, "chat/completions") {
 		p.Mode = "chat"
 		if err = p.chatApiProcess(requestBody); err != nil {
-            context.Logger.Error("chatApiProcess error", err)
-            p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
-			//logger.Log.Error(err)
+			context.Logger.Error("chatApiProcess error", err)
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 	}
 	if strings.Contains(p.GetContext().RequestParam, "images/generations") {
 		p.Mode = "image"
 		if err = p.imageApiProcess(requestBody); err != nil {
-            context.Logger.Error("chatApiProcess error", err)
-            p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
-			//logger.Log.Error(err)
+			context.Logger.Error("chatApiProcess error", err)
+			p.GetContext().GinContext.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 	}

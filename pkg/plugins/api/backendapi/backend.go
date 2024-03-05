@@ -138,10 +138,10 @@ func (p *BackendProcess) WsToStreamResponse(ws *wsstostream.WssToStream, respons
 		default:
 			message, err := ws.ReadMessage()
 			if err != nil {
-                if err != io.EOF { // 如果非EOF错误，才记录错误
-                    context.Logger.Error(err)
-                }
-                continue // 如果出现错误，继续监听下一条消息
+				if err != io.EOF { // 如果非EOF错误，才记录错误
+					context.Logger.Error(err)
+				}
+				continue // 如果出现错误，继续监听下一条消息
 			}
 			data, err := io.ReadAll(message)
 			if err != nil {
