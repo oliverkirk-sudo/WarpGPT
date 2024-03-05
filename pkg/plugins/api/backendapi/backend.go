@@ -119,6 +119,7 @@ func (p *BackendProcess) WsToStreamResponse(ws *wsstostream.WssToStream, respons
 	err := json.NewDecoder(response.Body).Decode(&jsonData)
 	if err != nil {
 		context.Logger.Error(err)
+		return // 如果 JSON 解码失败，函数应该停止执行
 	}
 	ws.ResponseId = jsonData.ResponseId
 	ws.ConversationId = jsonData.ConversationId
@@ -137,27 +138,29 @@ func (p *BackendProcess) WsToStreamResponse(ws *wsstostream.WssToStream, respons
 		default:
 			message, err := ws.ReadMessage()
 			if err != nil {
-				context.Logger.Error(err)
-				break
+                if err != io.EOF { // 如果非EOF错误，才记录错误
+                    context.Logger.Error(err)
+                }
+                continue // 如果出现错误，继续监听下一条消息
 			}
-			if message != nil {
-				data, err := io.ReadAll(message)
-				if err != nil {
-					context.Logger.Error(err)
-					return
-				}
-				_, writeErr := p.GetContext().GinContext.Writer.Write(data)
-				if writeErr != nil {
-					return
-				}
-				p.GetContext().GinContext.Writer.Flush()
-				if strings.Contains(string(data), "data: [DONE]") {
-					return
-				}
+			data, err := io.ReadAll(message)
+			if err != nil {
+				context.Logger.Error(err)
+				return
+			}
+			_, writeErr := p.GetContext().GinContext.Writer.Write(data)
+			if writeErr != nil {
+				context.Logger.Error(writeErr)
+				return
+			}
+			p.GetContext().GinContext.Writer.Flush()
+			if strings.Contains(string(data), "data: [DONE]") {
+				return
 			}
 		}
 	}
 }
+
 func (p *BackendProcess) createRequest(requestBody map[string]interface{}) (*http.Request, error) {
 	context.Logger.Debug("BackendProcess createRequest")
 	var request *http.Request
