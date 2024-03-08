@@ -40,10 +40,7 @@ func (c *SSEClient) Read() <-chan Event {
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				if err == io.EOF {
-					break
-				}
-				if strings.Contains(err.Error(), "use of closed network connection") {
-					c.logger.Printf("Message Done!") //当前会话结束时，提示结束而非报错。
+					c.logger.Printf("Message Done!")
 					break
 				}
 				c.logger.Printf("Error reading from event source: %v", err)

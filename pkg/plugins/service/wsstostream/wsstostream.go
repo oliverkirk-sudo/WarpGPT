@@ -148,23 +148,26 @@ func (s *WssToStream) ReadMessage() (io.ReadCloser, error) {
 	_, msg, err := s.Server.ReadMessage()
 	if err != nil {
 		logger.Log.Error("read message error:", err)
+		return nil, err
 	}
 	var response WsResponse
 	if err = json.Unmarshal(msg, &response); err != nil {
 		logger.Log.Error("unmarshal message error:", err)
+		return nil, err
 	}
 	if response.Data.ResponseId == s.ResponseId && response.Data.ConversationId == s.ConversationId {
-		if response.Data.Body == "ZGF0YTogW0RPTkVdCgo=" {
-			s.Server.Close()
-		}
 		data, err := base64.StdEncoding.DecodeString(response.Data.Body)
 		if err != nil {
+			logger.Log.Error("decode base64 message error:", err)
 			return nil, err
 		}
+		if response.Data.Body == "ZGF0YTogW0RPTkVdCgo=" {
+			s.Server.Close()
+			return NewNopCloser(data), io.EOF
+		}
 		return NewNopCloser(data), nil
-	} else {
-		return nil, nil
 	}
+	return nil, errors.New("response id or conversation id does not match")
 }
 func (s *WssToStream) Read(p []byte) (n int, err error) {
 	logger.Log.Debug("Read")
@@ -175,23 +178,25 @@ func (s *WssToStream) Read(p []byte) (n int, err error) {
 	var response WsResponse
 	if err = json.Unmarshal(message, &response); err != nil {
 		logger.Log.Error("unmarshal message error:", err)
+		return 0, err
 	}
 	if response.Data.ResponseId == s.ResponseId && response.Data.ConversationId == s.ConversationId {
-		if response.Data.Body == "ZGF0YTogW0RPTkVdCgo=" {
-			s.Server.Close()
-		}
 		data, err := base64.StdEncoding.DecodeString(response.Data.Body)
 		if err != nil {
+			logger.Log.Error("decode base64 message error:", err)
 			return 0, err
 		}
 		copyLen := copy(p, data)
 		if copyLen < len(data) {
-			return copyLen, errors.New("buffer too small to hold message")
+			return copyLen, io.ErrShortBuffer
+		}
+		if response.Data.Body == "ZGF0YTogW0RPTkVdCgo=" {
+			s.Server.Close()
+			return copyLen, io.EOF
 		}
 		return copyLen, nil
-	} else {
-		return 0, nil
 	}
+	return 0, errors.New("response id or conversation id do not match")
 }
 
 func (s *WssToStream) Close() error {
